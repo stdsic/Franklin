@@ -1,13 +1,15 @@
 #define _WIN32_WINNT 0x0A00
 #include "resource.h"
+#include <commctrl.h>
 #pragma GCC diagnostic ignored  "-Wunused-parameter"
 #pragma GCC diagnostic ignored  "-Wunused-variable"
 #define CLASS_NAME              L"Franklin"
-#define SUBCLASS_NAME           L"TodayScheduleMessageWindow";
+#define SUBCLASS_NAME           L"TodayScheduleMessageWindow"
 #define max(a,b)                (((a) > (b)) ? (a) : (b))
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 {
@@ -56,11 +58,23 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 
 #define TRAY_NOTIFY         (WM_APP + 1)
 #define WM_TODAYSCHEDULE	(WM_APP + 2)
+
+typedef struct tag_Param{
+    int Hour, Minute;
+    BOOL bFlag;
+    WCHAR Message[0x100];
+}InputParam;
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
-    static BOOL bBeep, bShowList;
-    static HWND MsgWnd[0x20];
-    static int Items;
+    static const int MaxSize = 0x20;
+    static BOOL bAlertMsg, bAlertBeep, bBeepSnd;
+    static HWND MsgWnd[MaxSize];
+    static HWND AlertWnd[MaxSize];
+    static int Items, BeepCnt;
+    static WCHAR Times[MaxSize][0x20];
+    static WCHAR Messages[MaxSize][0x100];
+    static WCHAR DisplayMessage[MaxSize][0x120];
 
     NOTIFYICONDATA nid;
     HMENU hMenu, hPopupMenu;
@@ -70,24 +84,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     WCHAR Temp[0x20];
     DWORD dwStyle, dwExStyle;
 
-    RECT crt, WorkArea;
+    RECT srt, crt, wrt, WorkArea;
     APPBARDATA abData;
     int ScreenWidth, ScreenHeight;
     int TaskBarHeight, Width, Height, x, y;
     int MaxLength, TextHeight;
 
-    WCHAR Times[0x20][0x20];
-    WCHAR Messages[0x20][0x100];
-    WCHAR DisplayMessage[0x20][0x120];
     TEXTMETRIC tm;
     SIZE TextSize;
     HDC hdc;
 
+    // 본래 DialogBoxParam으로 전달할 때는 static일 필요가 없다.
+    // 단, 최대 개수를 32개로 정해뒀으므로 static 키워드를 붙이고 배열로 관리하기로 한다.
+    // 이러면 파싱 함수가 필요없고 멤버 변수인 Hour, Min을 이용하여 비교 하면된다.
+    static InputParam param[MaxSize];
+    INT_PTR dlgret;
+
+    MONITORINFO mi;
+    HMONITOR hMonitor;
+    int cnt;
+
     switch(iMessage) {
         case WM_CREATE:
-            SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
-            bBeep = bShowList = FALSE;
-            Items = 0;
+            bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
+            dlgret = Items = 0;
+            memset(&param, 0, sizeof(param));
             ZeroMemory(&nid, sizeof(nid));
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hWnd;
@@ -97,6 +118,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
             wcscpy(nid.szTip, L"예약된 알람이 없습니다.");
             Shell_NotifyIcon(NIM_ADD, &nid);
+            SetTimer(hWnd, 1, 500, NULL);
             return 0;
 
         case TRAY_NOTIFY:
@@ -105,10 +127,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     hMenu = LoadMenu(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_MENU1));
                     hPopupMenu = GetSubMenu(hMenu, 0);
                     GetCursorPos(&Mouse);
-                    if(bBeep){
-                        CheckMenuItem(hMenu, IDM_BEEP, MF_BYCOMMAND | MF_CHECKED);
+                    if(bAlertBeep){
+                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_CHECKED);
                     }else{
-                        CheckMenuItem(hMenu, IDM_BEEP, MF_BYCOMMAND | MF_UNCHECKED);
+                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    if(bAlertMsg){
+                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_CHECKED);
+                    }else{
+                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_UNCHECKED);
                     }
                     SetForegroundWindow(hWnd);
                     TrackPopupMenu(hPopupMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON, Mouse.x, Mouse.y, 0, hWnd, NULL);
@@ -126,60 +153,186 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
         case WM_TIMER:
             switch(wParam){
                 case 1:
+                    GetLocalTime(&st);
+                    for(int i=0; i<Items; i++){
+                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute && param[i].bFlag == FALSE){
+                            param[i].bFlag = TRUE;
+                            if(bAlertMsg){
+                                dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
+                                dwExStyle = WS_EX_COMPOSITED;
+
+                                SetRect(&crt, 0,0, 300, 200);
+                                AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
+
+                                SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
+
+                                ScreenWidth		= WorkArea.right - WorkArea.left;
+                                ScreenHeight	= WorkArea.bottom - WorkArea.top;
+
+                                memset(&abData, 0, sizeof(abData));
+                                abData.cbSize = sizeof(abData);
+                                if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
+                                    GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
+                                }
+
+                                TaskBarHeight	= abData.rc.bottom - abData.rc.top;
+                                Width			= crt.right - crt.left;
+                                Height			= crt.bottom - crt.top;
+                                x				= ScreenWidth - Width >> 1;
+                                y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
+
+                                if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); }
+                                AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+                                SendMessage(AlertWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[i]);
+                            }
+
+                            if(bAlertBeep){
+                                BeepCnt = 0;
+                                SetTimer(hWnd, 2, 5000, NULL);
+                                SendMessage(hWnd, WM_TIMER, 2, 0);
+                            }
+                        }
+                    }
+                    break;
+
+                case 2:
+                    if(BeepCnt < 12){
+                        MessageBeep(0);
+                        BeepCnt++;
+                    }else{
+                        KillTimer(hWnd, 2);
+                    }
                     break;
             }
             return 0;
 
         case WM_COMMAND:
             switch(LOWORD(wParam)){
-                case IDM_BEEP:
-                    bBeep = !bBeep;
+                case IDM_BEEPOFF:
+                    KillTimer(hWnd, 2);
+                    break;
+
+                case IDM_ALERTBEEP:
+                    bAlertBeep = !bAlertBeep;
+                    bBeepSnd = (bAlertBeep == TRUE) ? TRUE : FALSE;
+                    break;
+
+                case IDM_ALERTMSG:
+                    bAlertMsg = !bAlertMsg;
                     break;
 
                 case IDM_SHOWLIST:
-                    hdc = GetDC(hWnd);
-                    for(int i=0; i<Items; i++){
-                        // wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
-                        GetTextExtentPoint32(hdc, DisplayMessage[i], wcslen(DisplayMessage[i]), &TextSize);
-                        MaxLength = max(MaxLength, TextSize.cx);
+                    if(Items > 0){
+                        hdc = GetDC(hWnd);
+                        for(int i=0; i<Items; i++){
+                            wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+                            GetTextExtentPoint32(hdc, DisplayMessage[i], wcslen(DisplayMessage[i]), &TextSize);
+                            MaxLength = max(MaxLength, TextSize.cx);
+                        }
+                        GetTextMetrics(hdc, &tm);
+                        TextHeight = tm.tmHeight;
+                        ReleaseDC(hWnd, hdc);
+
+                        dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
+                        dwExStyle = WS_EX_COMPOSITED;
+                        SetRect(&crt, 0,0, MaxLength, TextHeight);
+                        AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
+
+                        SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
+                        ScreenWidth		= WorkArea.right - WorkArea.left;
+                        ScreenHeight	= WorkArea.bottom - WorkArea.top;
+
+                        memset(&abData, 0, sizeof(abData));
+                        abData.cbSize = sizeof(abData);
+                        if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
+                            GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
+                        }
+
+                        for(int i=0; i<MaxSize; i++){
+                            if(MsgWnd[i] && IsWindow(MsgWnd[i])){
+                                DestroyWindow(MsgWnd[i]);
+                            }else{ break; }
+                        }
+
+                        TaskBarHeight	= abData.rc.bottom - abData.rc.top;
+                        Width			= crt.right - crt.left + 4;
+                        Height			= crt.bottom - crt.top + TextHeight + 18;
+                        x				= ScreenWidth - Width;
+                        y				= ScreenHeight - (TaskBarHeight + Height);
+
+                        for(int i=0; i<Items; i++){
+                            MsgWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y - ((Height - 18) * i), Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+                            SendMessage(MsgWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[Items - (1 + i)]);
+                        }
                     }
-                    ReleaseDC(hWnd, hdc);
-
-                    TextHeight = tm.tmHeight;
-                    dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
-                    dwExStyle = WS_EX_COMPOSITED;
-                    SetRect(&crt, 0,0, MaxLength, TextHeight);
-                    AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
-                    if(dwStyle & WS_VSCROLL){ crt.right += GetSystemMetrics(SM_CXVSCROLL); }
-                    if(dwStyle & WS_HSCROLL){ crt.bottom += GetSystemMetrics(SM_CYHSCROLL); }
-
-                    ScreenWidth		= WorkArea.right - WorkArea.left;
-                    ScreenHeight	= WorkArea.bottom - WorkArea.top;
-
-                    memset(&abData, 0, sizeof(abData));
-                    abData.cbSize = sizeof(abData);
-                    if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
-                        GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
-                    }
-
-                    TaskBarHeight	= abData.rc.bottom - abData.rc.top;
-                    Width			= crt.right - crt.left;
-                    Height			= crt.bottom - crt.top;
-                    x				= 0;
-                    y				= 0;
-
-                    for(j=0; j<0x20; j++){
-                        if(MsgWnd[i] && IsWindow(MsgWnd[i])){
-                            DestroyWindow(MsgWnd[i]);
-                        }else{ break; }
-                    }
-
-                    // MsgWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y - ((Height - 18) * k), Width, Height, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
-                    // SendMessage(MsgWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage);
                     break;
 
                 case IDM_MAKEITEM:
-                    // TODO: 작업 추가 대화상자
+                    if(Items >= MaxSize){ 
+                        if(IDYES == MessageBox(hWnd, L"알람을 더이상 등록할 수 없습니다(Max: 32)\r\n이전에 등록된 알람이 해제되면 다시 등록할 수 있습니다.\r\n정리 프로세스를 실행하시겠습니까?", L"정보", MB_ICONINFORMATION | MB_YESNO)){
+                            PostMessage(hWnd, IDM_CLEARPAST, 0, 0);
+                        }
+                    }else{
+                        // 부모 윈도우가 ACTIVATE 상태가 되지 않으므로 포커스 옮기려면 임의로 활성화 필요
+                        SetForegroundWindow(hWnd);
+                        dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR), hWnd, (DLGPROC)DlgProc, (LPARAM)&param[Items]);
+                        if(dlgret == IDOK){
+                            wsprintf(Times[Items], L"%02d : %02d", param[Items].Hour, param[Items].Minute);
+                            if(param[Items].Message == NULL){
+                                wsprintf(Messages[Items], L"");
+                            }else{
+                                wsprintf(Messages[Items], L"%s", param[Items].Message);
+                            }
+                            Items++;
+
+                            ZeroMemory(&nid, sizeof(nid));
+                            nid.cbSize = sizeof(NOTIFYICONDATA);
+                            nid.hWnd = hWnd;
+                            nid.uID = 0;
+                            nid.uFlags = NIF_TIP;
+                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                            wcscpy(nid.szTip, Temp);
+                            Shell_NotifyIcon(NIM_MODIFY, &nid);
+                        }
+                    }
+                    break;
+
+                case IDM_CLEARPAST:
+                    if(Items > 0){
+                        cnt = 0;
+                        GetLocalTime(&st);
+                        for(int i=0; i<Items; i++){
+                            if(param[i].bFlag == TRUE){
+                                memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
+                                Items--;
+                                cnt++;
+                                i--;
+                            }
+                        }
+
+                        ZeroMemory(&nid, sizeof(nid));
+                        nid.cbSize = sizeof(NOTIFYICONDATA);
+                        nid.hWnd = hWnd;
+                        nid.uID = 0;
+                        nid.uFlags = NIF_TIP | NIF_INFO;
+                        if(cnt > 0){
+                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                        }else{
+                            wsprintf(Temp, L"정리할 알람이 없습니다.");
+                        }
+                        wcscpy(nid.szInfo, Temp);
+                        wcscpy(nid.szInfoTitle, L"알림");
+                        nid.dwInfoFlags = NIIF_INFO;
+
+                        if(Items > 0){
+                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                        }else{
+                            wsprintf(Temp, L"예약된 알람이 없습니다.");
+                        }
+                        wcscpy(nid.szTip, Temp);
+                        Shell_NotifyIcon(NIM_MODIFY, &nid);
+                    }
                     break;
 
                 case IDM_EXIT:
@@ -322,6 +475,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
             return 0;
 
         case WM_DESTROY:
+            KillTimer(GetParent(hWnd), 2);
             Data = (WCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
             if(Data){ free(Data); }
             return 0;
@@ -330,3 +484,38 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
     return (DefWindowProc(hWnd, iMessage, wParam, lParam));
 }
 
+INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam){
+    static InputParam *ret;
+
+    switch(iMessage){
+        case WM_INITDIALOG:
+            ret = (InputParam*)lParam;
+            SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT1), EM_LIMITTEXT, (WPARAM)2, 0);
+            SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT2), EM_LIMITTEXT, (WPARAM)2, 0);
+            SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT3), EM_LIMITTEXT, (WPARAM)0xFF, 0);
+            SendMessage(GetDlgItem(hDlg, IDC_SPIN1), UDM_SETRANGE, 0, MAKELPARAM(0, 23));
+            SendMessage(GetDlgItem(hDlg, IDC_SPIN2), UDM_SETRANGE, 0, MAKELPARAM(0, 23));
+            SetFocus(GetDlgItem(hDlg, IDC_ITEMEDIT1));
+            return TRUE;
+
+        case WM_COMMAND:
+            switch(LOWORD(wParam)){
+                case IDOK:
+                    if(ret != NULL){
+                        ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE);
+                        ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE);
+                        GetDlgItemText(hDlg, IDC_ITEMEDIT3, ret->Message, 0x100);
+                    }else{
+                        MessageBox(hDlg, L"전달된 매개변수를 읽지 못했습니다.\r\n다시 시도해주세요.", L"에러", MB_ICONERROR | MB_OK);
+                    }
+                    EndDialog(hDlg, LOWORD(wParam));
+                    return TRUE;
+
+                case IDCANCEL:
+                    EndDialog(hDlg, LOWORD(wParam));
+                    return TRUE;
+            }
+            return FALSE;
+    }
+    return FALSE;
+}
