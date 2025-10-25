@@ -328,7 +328,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         wcscpy(nid.szInfo, Temp);
                         wcscpy(nid.szInfoTitle, L"알림");
                         nid.dwInfoFlags = NIIF_INFO;
-
                         if(Items > 0){
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
                             nid.hIcon = hAlarmOn;
