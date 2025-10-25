@@ -5,5 +5,6 @@
 *.exe
 *.bat
 *.ico
+*.res
 !assets/icons/alarm_bell.ico
 !assets/icons/alarm_bell_on.ico
