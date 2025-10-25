@@ -75,6 +75,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     static WCHAR Times[MaxSize][0x20];
     static WCHAR Messages[MaxSize][0x100];
     static WCHAR DisplayMessage[MaxSize][0x120];
+    static HICON hAlarmClock, hAlarmOn;
 
     NOTIFYICONDATA nid;
     HMENU hMenu, hPopupMenu;
@@ -108,6 +109,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
         case WM_CREATE:
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
             dlgret = Items = 0;
+            hAlarmClock = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
+            hAlarmOn = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON2));
             memset(&param, 0, sizeof(param));
             ZeroMemory(&nid, sizeof(nid));
             nid.cbSize = sizeof(NOTIFYICONDATA);
@@ -115,7 +118,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.uID = 0;
             nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
             nid.uCallbackMessage = TRAY_NOTIFY;
-            nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
+            nid.hIcon = hAlarmClock;
             wcscpy(nid.szTip, L"예약된 알람이 없습니다.");
             Shell_NotifyIcon(NIM_ADD, &nid);
             SetTimer(hWnd, 1, 500, NULL);
@@ -290,9 +293,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             nid.cbSize = sizeof(NOTIFYICONDATA);
                             nid.hWnd = hWnd;
                             nid.uID = 0;
-                            nid.uFlags = NIF_TIP;
+                            nid.uFlags = NIF_TIP | NIF_ICON;
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
                             wcscpy(nid.szTip, Temp);
+                            nid.hIcon = hAlarmOn;
                             Shell_NotifyIcon(NIM_MODIFY, &nid);
                         }
                     }
@@ -315,7 +319,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         nid.cbSize = sizeof(NOTIFYICONDATA);
                         nid.hWnd = hWnd;
                         nid.uID = 0;
-                        nid.uFlags = NIF_TIP | NIF_INFO;
+                        nid.uFlags = NIF_TIP | NIF_INFO | NIF_ICON;
                         if(cnt > 0){
                             wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
                         }else{
@@ -327,8 +331,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                         if(Items > 0){
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                            nid.hIcon = hAlarmOn;
                         }else{
                             wsprintf(Temp, L"예약된 알람이 없습니다.");
+                            nid.hIcon = hAlarmClock;
                         }
                         wcscpy(nid.szTip, Temp);
                         Shell_NotifyIcon(NIM_MODIFY, &nid);
@@ -347,6 +353,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.hWnd = hWnd;
             nid.uID = 0;
             Shell_NotifyIcon(NIM_DELETE, &nid);
+            DestroyIcon(hAlarmClock);
+            DestroyIcon(hAlarmOn);
             PostQuitMessage(0);
             return 0;
     }
@@ -379,6 +387,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
             pt.y		= HIWORD(lParam);
             ScreenToClient(hWnd, &pt);
 
+            GetClientRect(hWnd, &crt);
             x	= crt.right - (crt.left + ButtonWidth + 2);
             y	= crt.top + 2;
 
@@ -395,6 +404,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
             pt.x = LOWORD(lParam);
             pt.y = HIWORD(lParam);
 
+            GetClientRect(hWnd, &crt);
             x	= (crt.right - crt.left) - (ButtonWidth + 2);
             y	= crt.top + 2;
 
@@ -409,6 +419,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
             pt.x = LOWORD(lParam);
             pt.y = HIWORD(lParam);
 
+            GetClientRect(hWnd, &crt);
             x	= (crt.right - crt.left) - (ButtonWidth + 2);
             y	= crt.top + 2;
 
