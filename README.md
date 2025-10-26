@@ -22,12 +22,13 @@ Windows Legacy API를 이용한 일정 관리 프로그램입니다.<br>
 ## ❓ Help<br>
 - 아이콘 좌클릭시 일정을 기록하기 위한 대화상자가 생성됩니다.<br>
 - 아이콘 우클릭시 메뉴가 활성되며 프로그램이 지원하는 기능들을 확인하실 수 있습니다.<br>
-- 알려진 버그(알림 센터 아이콘)가 존재하며 추후 업데이트 예정입니다.
 <br><br>
 ## 👤 Authors<br>
 - stdsic — @https://github.com/stdsic/Franklin<br>
 <br><br>
 ## 📚 Version History<br>
+- 1.0.1<br>
+  - 알려진 버그 수정: 알림 센터 아이콘 및 모듈 ID 변경
 - 1.0.0<br>
   - 최초 릴리스(beta)<br>
 <br><br>
