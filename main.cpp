@@ -1,5 +1,6 @@
 #define _WIN32_WINNT 0x0A00
 #include "resource.h"
+#include <shobjidl.h>
 #include <commctrl.h>
 #pragma GCC diagnostic ignored  "-Wunused-parameter"
 #pragma GCC diagnostic ignored  "-Wunused-variable"
@@ -75,7 +76,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     static WCHAR Times[MaxSize][0x20];
     static WCHAR Messages[MaxSize][0x100];
     static WCHAR DisplayMessage[MaxSize][0x120];
-    static HICON hAlarmClock, hAlarmOn;
+    static HICON hAlarmClock, hAlarmOn; //, hBallonTitle;
 
     NOTIFYICONDATA nid;
     HMENU hMenu, hPopupMenu;
@@ -105,27 +106,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     HMONITOR hMonitor;
     int cnt;
 
+    HRESULT hr;
+
     switch(iMessage) {
         case WM_CREATE:
+            // 알림 센터에서 인식하는 모듈 ID설정
+            hr = SetCurrentProcessExplicitAppUserModelID(L"Franklin Alert");
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
             dlgret = Items = 0;
             hAlarmClock = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
             hAlarmOn = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON2));
+
             memset(&param, 0, sizeof(param));
-            ZeroMemory(&nid, sizeof(nid));
+            ZeroMemory(&nid, sizeof(NOTIFYICONDATA));
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hWnd;
-            nid.uID = 0;
+            nid.uID = 1201;
             nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
+            wcscpy(nid.szTip, L"예약된 알람이 없습니다.");
             nid.uCallbackMessage = TRAY_NOTIFY;
             nid.hIcon = hAlarmClock;
-            wcscpy(nid.szTip, L"예약된 알람이 없습니다.");
             Shell_NotifyIcon(NIM_ADD, &nid);
+            nid.uVersion = NOTIFYICON_VERSION_4;
+            Shell_NotifyIcon(NIM_SETVERSION, &nid);
             SetTimer(hWnd, 1, 500, NULL);
             return 0;
 
         case TRAY_NOTIFY:
-            switch(lParam){
+            switch(LOWORD(lParam)){
                 case WM_RBUTTONDOWN:
                     hMenu = LoadMenu(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_MENU1));
                     hPopupMenu = GetSubMenu(hMenu, 0);
@@ -292,7 +300,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             ZeroMemory(&nid, sizeof(nid));
                             nid.cbSize = sizeof(NOTIFYICONDATA);
                             nid.hWnd = hWnd;
-                            nid.uID = 0;
+                            nid.uID = 1201;
                             nid.uFlags = NIF_TIP | NIF_ICON;
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
                             wcscpy(nid.szTip, Temp);
@@ -314,20 +322,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 i--;
                             }
                         }
-
                         ZeroMemory(&nid, sizeof(nid));
                         nid.cbSize = sizeof(NOTIFYICONDATA);
                         nid.hWnd = hWnd;
-                        nid.uID = 0;
+                        nid.uID = 1201;
                         nid.uFlags = NIF_TIP | NIF_INFO | NIF_ICON;
+                        nid.dwInfoFlags = NIIF_INFO;
                         if(cnt > 0){
                             wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
                         }else{
                             wsprintf(Temp, L"정리할 알람이 없습니다.");
                         }
                         wcscpy(nid.szInfo, Temp);
-                        wcscpy(nid.szInfoTitle, L"알림");
-                        nid.dwInfoFlags = NIIF_INFO;
+                        wcscpy(nid.szInfoTitle, L"정보");
                         if(Items > 0){
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
                             nid.hIcon = hAlarmOn;
@@ -350,7 +357,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             KillTimer(hWnd, 1);
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hWnd;
-            nid.uID = 0;
+            nid.uID = 1201;
             Shell_NotifyIcon(NIM_DELETE, &nid);
             DestroyIcon(hAlarmClock);
             DestroyIcon(hAlarmOn);
