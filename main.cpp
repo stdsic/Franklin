@@ -170,7 +170,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             param[i].bFlag = TRUE;
                             if(bAlertMsg){
                                 dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
-                                dwExStyle = WS_EX_COMPOSITED;
+                                dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
 
                                 SetRect(&crt, 0,0, 300, 200);
                                 AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
@@ -246,7 +246,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         ReleaseDC(hWnd, hdc);
 
                         dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
-                        dwExStyle = WS_EX_COMPOSITED;
+                        dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
                         SetRect(&crt, 0,0, MaxLength, TextHeight);
                         AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
 
