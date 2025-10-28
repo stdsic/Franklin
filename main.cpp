@@ -11,6 +11,7 @@
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 {
@@ -32,6 +33,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
     wcex.lpszClassName = SUBCLASS_NAME;
     wcex.lpfnWndProc = (WNDPROC)TodayScheduleWndProc;
     RegisterClassEx(&wcex);
+
 
     HWND hWnd = CreateWindowEx(
             WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
@@ -60,11 +62,16 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 #define TRAY_NOTIFY         (WM_APP + 1)
 #define WM_TODAYSCHEDULE	(WM_APP + 2)
 
-typedef struct tag_Param{
+typedef struct tag_inParam{
     int Hour, Minute;
     BOOL bFlag;
     WCHAR Message[0x100];
 }InputParam;
+
+typedef struct tag_outParam{
+    int nItems, nDelete;
+    InputParam *ptr;
+}OutputParam;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
@@ -100,6 +107,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     // 단, 최대 개수를 32개로 정해뒀으므로 static 키워드를 붙이고 배열로 관리하기로 한다.
     // 이러면 파싱 함수가 필요없고 멤버 변수인 Hour, Min을 이용하여 비교 하면된다.
     static InputParam param[MaxSize];
+    OutputParam outParam;
     INT_PTR dlgret;
 
     MONITORINFO mi;
@@ -107,6 +115,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     int cnt;
 
     HRESULT hr;
+    INITCOMMONCONTROLSEX icex;
 
     switch(iMessage) {
         case WM_CREATE:
@@ -114,6 +123,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             hr = SetCurrentProcessExplicitAppUserModelID(L"Franklin Alert");
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
             dlgret = Items = 0;
+            memset(&icex, 0, sizeof(icex));
+            icex.dwSize = sizeof(icex);
+            icex.dwICC = ICC_LISTVIEW_CLASSES;
+            InitCommonControlsEx(&icex);
             hAlarmClock = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
             hAlarmOn = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON2));
 
@@ -287,7 +300,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     }else{
                         // 부모 윈도우가 ACTIVATE 상태가 되지 않으므로 포커스 옮기려면 임의로 활성화 필요
                         SetForegroundWindow(hWnd);
-                        dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR), hWnd, (DLGPROC)DlgProc, (LPARAM)&param[Items]);
+                        dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR1), hWnd, (DLGPROC)DlgProc, (LPARAM)&param[Items]);
                         if(dlgret == IDOK){
                             wsprintf(Times[Items], L"%02d : %02d", param[Items].Hour, param[Items].Minute);
                             if(param[Items].Message == NULL){
@@ -308,6 +321,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             Shell_NotifyIcon(NIM_MODIFY, &nid);
                         }
                     }
+                    break;
+
+                case IDM_DELETEITEM:
+                    memset(&outParam, 0, sizeof(outParam));
+                    outParam.nItems = Items;
+                    outParam.ptr = &param[0];
+                    dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
+                    cnt = outParam.nDelete;
+                    Items -= cnt;
+
+                    ZeroMemory(&nid, sizeof(nid));
+                    nid.cbSize = sizeof(NOTIFYICONDATA);
+                    nid.uFlags = NIF_TIP | NIF_ICON;
+                    nid.hWnd = hWnd;
+                    nid.uID = 1201;
+                    if(cnt > 0){
+                        wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                        nid.uFlags |= NIF_INFO;
+                        nid.dwInfoFlags = NIIF_INFO;
+                        wcscpy(nid.szInfo, Temp);
+                        wcscpy(nid.szInfoTitle, L"정보");
+                    }
+
+                    if(Items > 0){
+                        wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                        nid.hIcon = hAlarmOn;
+                    }else{
+                        wsprintf(Temp, L"예약된 알람이 없습니다.");
+                        nid.hIcon = hAlarmClock;
+                    }
+
+                    wcscpy(nid.szTip, Temp);
+                    Shell_NotifyIcon(NIM_MODIFY, &nid);
                     break;
 
                 case IDM_CLEARPAST:
@@ -382,6 +428,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
 
     switch(iMessage){
         case WM_CREATE:
+
             ptr = Data = NULL;
             ButtonWidth = ButtonHeight = 16;
             bInit = FALSE;
@@ -512,7 +559,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
             SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT3), EM_LIMITTEXT, (WPARAM)0xFF, 0);
             SendMessage(GetDlgItem(hDlg, IDC_SPIN1), UDM_SETRANGE, 0, MAKELPARAM(0, 23));
             SendMessage(GetDlgItem(hDlg, IDC_SPIN2), UDM_SETRANGE, 0, MAKELPARAM(0, 23));
-            SetFocus(GetDlgItem(hDlg, IDC_ITEMEDIT1));
             return TRUE;
 
         case WM_COMMAND:
@@ -534,5 +580,88 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
             }
             return FALSE;
     }
+    return FALSE;
+}
+
+INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam){
+    static const int MaxSize = 0x20;
+    static int Items;
+
+    static OutputParam *ret;
+
+    WCHAR Temp[0x20];
+    static WCHAR Time[MaxSize][0x100];
+    static WCHAR Times[MaxSize][0x20];
+    static WCHAR Messages[MaxSize][0x100];
+    static WCHAR DisplayMessage[MaxSize][0x120];
+
+    static HWND hListView;
+    LVCOLUMN lvc;
+    LVITEM lvi;
+    RECT srt;
+
+    int cnt;
+
+    switch(iMessage){
+        case WM_INITDIALOG:
+            ret = (OutputParam*)lParam;
+            if(ret == NULL){ EndDialog(hDlg, -1); return FALSE; }
+
+            Items = ret->nItems;
+
+            SetRect(&srt, 10, 5, 290, 135);
+            MapDialogRect(hDlg, &srt);
+            hListView = CreateWindowEx(0, WC_LISTVIEW, NULL, WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hDlg, (HMENU)(INT_PTR)IDC_LISTVIEW, GetModuleHandle(NULL), NULL);
+            ListView_SetExtendedListViewStyle(hListView, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+
+            memset(&lvc, 0, sizeof(lvc));
+            lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+            lvc.iSubItem = 0;
+            lvc.pszText = (LPWSTR)L"항목";
+            lvc.cx = 600;
+            ListView_InsertColumn(hListView, 0, &lvc);
+
+            for(int i=0; i<Items; i++){
+                memset(&lvi, 0, sizeof(lvi));
+                lvi.mask = LVIF_TEXT;
+                lvi.iItem = i;
+
+                wsprintf(Times[i], L"%02d : %02d", ret->ptr[i].Hour, ret->ptr[i].Minute);
+                if(ret->ptr[i].Message == NULL){
+                    wsprintf(Messages[i], L"");
+                }else{
+                    wsprintf(Messages[i], L"%s", ret->ptr[i].Message);
+                }
+
+                wsprintf(DisplayMessage[i], L"%s, %s", Times[i], Messages[i]);
+                lvi.pszText = DisplayMessage[i];
+                ListView_InsertItem(hListView, &lvi);
+            }
+            return TRUE;
+
+        case WM_COMMAND:
+            switch(LOWORD(wParam)){
+                case IDOK:
+                    cnt = 0;
+                    for (int i=0; i<Items; i++) {
+                        BOOL checked = ListView_GetCheckState(hListView, i);
+                        if(checked){
+                            memmove(&ret->ptr[i], &ret->ptr[i + 1], sizeof(InputParam) * (Items - i - 1));
+                            Items--;
+                            cnt++;
+                            i--;
+                        }
+                    }
+                    ret->nDelete = cnt;
+                    EndDialog(hDlg, LOWORD(wParam));
+                    return TRUE;
+
+                case IDCANCEL:
+                    EndDialog(hDlg, LOWORD(wParam));
+                    return TRUE;
+            }
+            return FALSE;
+    }
+
     return FALSE;
 }
