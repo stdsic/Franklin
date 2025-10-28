@@ -27,10 +27,12 @@ Windows Legacy API를 이용한 일정 관리 프로그램입니다.<br>
 - stdsic — @https://github.com/stdsic/Franklin<br>
 <br><br>
 ## 📚 Version History<br>
+- 1.0.3<br>
+  - 알람 삭제 기능 추가<br>
 - 1.0.2<br>
-  - 창의 배치 순서 변경 : 알림 메세지를 최상단에 생성
+  - 창의 배치 순서 변경 : 알림 메세지를 최상단에 생성<br>
 - 1.0.1<br>
-  - 알려진 버그 수정: 알림 센터 아이콘 및 모듈 ID 변경
+  - 알려진 버그 수정: 알림 센터 아이콘 및 모듈 ID 변경<br>
 - 1.0.0<br>
   - 최초 릴리스(beta)<br>
 <br><br>
