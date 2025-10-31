@@ -368,6 +368,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 i--;
                             }
                         }
+                        memset(param + Items, 0, sizeof(InputParam) * (MaxSize - Items));
                         ZeroMemory(&nid, sizeof(nid));
                         nid.cbSize = sizeof(NOTIFYICONDATA);
                         nid.hWnd = hWnd;
@@ -418,7 +419,6 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
     POINT	pt;
     WCHAR  *ptr, *Data;
     static BOOL		bInit, bDown;
-    static HBITMAP	hBitmap;
     static RECT		crt;
     static int		ButtonWidth, ButtonHeight;
 
@@ -428,7 +428,6 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
 
     switch(iMessage){
         case WM_CREATE:
-
             ptr = Data = NULL;
             ButtonWidth = ButtonHeight = 16;
             bInit = FALSE;
@@ -542,6 +541,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
             KillTimer(GetParent(hWnd), 2);
             Data = (WCHAR*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
             if(Data){ free(Data); }
+            bInit = bDown = FALSE;
             return 0;
     }
 
@@ -554,6 +554,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
     switch(iMessage){
         case WM_INITDIALOG:
             ret = (InputParam*)lParam;
+            memset(ret, 0, sizeof(InputParam));
             SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT1), EM_LIMITTEXT, (WPARAM)2, 0);
             SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT2), EM_LIMITTEXT, (WPARAM)2, 0);
             SendMessage(GetDlgItem(hDlg, IDC_ITEMEDIT3), EM_LIMITTEXT, (WPARAM)0xFF, 0);
@@ -643,15 +644,15 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
             switch(LOWORD(wParam)){
                 case IDOK:
                     cnt = 0;
-                    for (int i=0; i<Items; i++) {
+                    for (int i=Items - 1; i>=0; i--) {
                         BOOL checked = ListView_GetCheckState(hListView, i);
-                        if(checked){
+                        if(checked == 1){
                             memmove(&ret->ptr[i], &ret->ptr[i + 1], sizeof(InputParam) * (Items - i - 1));
                             Items--;
                             cnt++;
-                            i--;
                         }
                     }
+                    memset(ret->ptr + Items, 0, sizeof(InputParam) * (MaxSize - Items));
                     ret->nDelete = cnt;
                     EndDialog(hDlg, LOWORD(wParam));
                     return TRUE;
