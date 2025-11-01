@@ -27,6 +27,8 @@ Windows Legacy API를 이용한 일정 관리 프로그램입니다.<br>
 - stdsic — @https://github.com/stdsic/Franklin<br>
 <br><br>
 ## 📚 Version History<br>
+- 1.0.5<br>
+  - 오류 수정 : 알람 삭제 이후 잘못된 메세지가 출력되는 현상, 시간 및 입력 메세지 관리 로직 변경
 - 1.0.4<br>
   - 오류 수정 : 삭제 및 등록간 메모리 초기화 동작 추가, 아이템 관리 로직 변경
 - 1.0.3<br>
