@@ -140,8 +140,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.uCallbackMessage = TRAY_NOTIFY;
             nid.hIcon = hAlarmClock;
             Shell_NotifyIcon(NIM_ADD, &nid);
-            nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIcon(NIM_SETVERSION, &nid);
             SetTimer(hWnd, 1, 500, NULL);
             return 0;
 
@@ -331,13 +329,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     outParam.ptr = &param[0];
                     dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
 
-                    if(dlgret == IDOK){
+                    cnt = outParam.nDelete;
+                    Items -= cnt;
+
+                    if(cnt > 0){
                         memset(DisplayMessage, 0, sizeof(DisplayMessage));
                         memset(Times, 0, sizeof(Times));
                         memset(Messages, 0, sizeof(Messages));
-
-                        cnt = outParam.nDelete;
-                        Items -= cnt;
 
                         for(int i=0; i<Items; i++){
                             wsprintf(Times[i], L"%02d : %02d", outParam.ptr[i].Hour, outParam.ptr[i].Minute);
@@ -354,13 +352,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         nid.uFlags = NIF_TIP | NIF_ICON;
                         nid.hWnd = hWnd;
                         nid.uID = 1201;
-                        if(cnt > 0){
-                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
-                            nid.uFlags |= NIF_INFO;
-                            nid.dwInfoFlags = NIIF_INFO;
-                            wcscpy(nid.szInfo, Temp);
-                            wcscpy(nid.szInfoTitle, L"정보");
-                        }
+
+                        wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                        nid.uFlags |= NIF_INFO;
+                        nid.dwInfoFlags = NIIF_INFO;
+                        wcscpy(nid.szInfo, Temp);
+                        wcscpy(nid.szInfoTitle, L"정보");
 
                         if(Items > 0){
                             wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
