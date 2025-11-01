@@ -205,8 +205,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 x				= ScreenWidth - Width >> 1;
                                 y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
 
-                                if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); }
+                                if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); AlertWnd[i] = NULL; }
                                 AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+                                memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
                                 wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
                                 SendMessage(AlertWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[i]);
                             }
@@ -249,6 +250,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case IDM_SHOWLIST:
                     if(Items > 0){
                         hdc = GetDC(hWnd);
+                        memset(DisplayMessage, 0, sizeof(DisplayMessage));
                         for(int i=0; i<Items; i++){
                             wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
                             GetTextExtentPoint32(hdc, DisplayMessage[i], wcslen(DisplayMessage[i]), &TextSize);
@@ -328,47 +330,69 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     outParam.nItems = Items;
                     outParam.ptr = &param[0];
                     dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
-                    cnt = outParam.nDelete;
-                    Items -= cnt;
 
-                    ZeroMemory(&nid, sizeof(nid));
-                    nid.cbSize = sizeof(NOTIFYICONDATA);
-                    nid.uFlags = NIF_TIP | NIF_ICON;
-                    nid.hWnd = hWnd;
-                    nid.uID = 1201;
-                    if(cnt > 0){
-                        wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
-                        nid.uFlags |= NIF_INFO;
-                        nid.dwInfoFlags = NIIF_INFO;
-                        wcscpy(nid.szInfo, Temp);
-                        wcscpy(nid.szInfoTitle, L"정보");
+                    if(dlgret == IDOK){
+                        memset(DisplayMessage, 0, sizeof(DisplayMessage));
+                        memset(Times, 0, sizeof(Times));
+                        memset(Messages, 0, sizeof(Messages));
+
+                        cnt = outParam.nDelete;
+                        Items -= cnt;
+
+                        for(int i=0; i<Items; i++){
+                            wsprintf(Times[i], L"%02d : %02d", outParam.ptr[i].Hour, outParam.ptr[i].Minute);
+                            if(outParam.ptr[i].Message == NULL){
+                                wsprintf(Messages[i], L"");
+                            }else{
+                                wsprintf(Messages[i], L"%s", outParam.ptr[i].Message);
+                            }
+                            wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+                        }
+
+                        ZeroMemory(&nid, sizeof(nid));
+                        nid.cbSize = sizeof(NOTIFYICONDATA);
+                        nid.uFlags = NIF_TIP | NIF_ICON;
+                        nid.hWnd = hWnd;
+                        nid.uID = 1201;
+                        if(cnt > 0){
+                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                            nid.uFlags |= NIF_INFO;
+                            nid.dwInfoFlags = NIIF_INFO;
+                            wcscpy(nid.szInfo, Temp);
+                            wcscpy(nid.szInfoTitle, L"정보");
+                        }
+
+                        if(Items > 0){
+                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                            nid.hIcon = hAlarmOn;
+                        }else{
+                            wsprintf(Temp, L"예약된 알람이 없습니다.");
+                            nid.hIcon = hAlarmClock;
+                        }
+
+                        wcscpy(nid.szTip, Temp);
+                        Shell_NotifyIcon(NIM_MODIFY, &nid);
                     }
-
-                    if(Items > 0){
-                        wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
-                        nid.hIcon = hAlarmOn;
-                    }else{
-                        wsprintf(Temp, L"예약된 알람이 없습니다.");
-                        nid.hIcon = hAlarmClock;
-                    }
-
-                    wcscpy(nid.szTip, Temp);
-                    Shell_NotifyIcon(NIM_MODIFY, &nid);
                     break;
 
                 case IDM_CLEARPAST:
                     if(Items > 0){
                         cnt = 0;
                         GetLocalTime(&st);
-                        for(int i=0; i<Items; i++){
+                        for(int i=Items - 1; i>=0; i--){
                             if(param[i].bFlag == TRUE){
                                 memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
+                                memmove(Times + i, Times + i + 1, sizeof(Times[i]));
+                                memmove(Messages+ i, Messages + i + 1, sizeof(Messages[i]));
+
                                 Items--;
                                 cnt++;
-                                i--;
                             }
                         }
                         memset(param + Items, 0, sizeof(InputParam) * (MaxSize - Items));
+                        memset(Times + Items, 0, sizeof(Times[0]) * (MaxSize - Items));
+                        memset(Messages+ Items, 0, sizeof(Messages[0]) * (MaxSize - Items));
+
                         ZeroMemory(&nid, sizeof(nid));
                         nid.cbSize = sizeof(NOTIFYICONDATA);
                         nid.hWnd = hWnd;
@@ -430,7 +454,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
         case WM_CREATE:
             ptr = Data = NULL;
             ButtonWidth = ButtonHeight = 16;
-            bInit = FALSE;
+            bInit = bDown = FALSE;
             return 0;
 
         case WM_NCHITTEST:
@@ -487,6 +511,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
                 // LPARAM으로 문자열 포인터 전달
                 ptr		= (WCHAR*)lParam;
                 Length	= wcslen(ptr);
+                if(Data){ free(Data); }
                 Data	= (WCHAR*)malloc(sizeof(WCHAR) * (Length + 1));
                 wsprintf(Data, L"%s", ptr);
                 SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)Data);
