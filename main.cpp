@@ -377,7 +377,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         cnt = 0;
                         GetLocalTime(&st);
                         for(int i=Items - 1; i>=0; i--){
-                            if(param[i].bFlag == TRUE){
+                            if(param[i].bFlag == TRUE || param[i].Hour <= st.wHour && param[i].Minute < st.wMinute){
                                 memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
                                 memmove(Times + i, Times + i + 1, sizeof(Times[i]));
                                 memmove(Messages+ i, Messages + i + 1, sizeof(Messages[i]));
