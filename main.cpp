@@ -139,12 +139,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     POINT Origin;
     HBRUSH hBrush, hOldBrush;
     HPEN hPen, hOldPen;
+    static BOOL bTop;
 
     switch(iMessage) {
         case WM_CREATE:
             // 알림 센터에서 인식하는 모듈 ID설정
-            bVisual = FALSE;
-            ERadius = 30;
+            bTop = bVisual = FALSE;
+            ERadius = 10;
             clMask = RGB(255,0,0);
             hr = SetCurrentProcessExplicitAppUserModelID(L"Franklin Alert");
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
@@ -225,9 +226,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     DeleteObject(hPen);
                 }
 
-
                 GetObject(hBitmap, sizeof(BITMAP), &bmp);
-                TransparentBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, bmp.bmWidth, bmp.bmHeight, clMask);
+                BitBlt(hdc, 0,0, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
 
                 SelectObject(hMemDC, hOld);
                 DeleteDC(hMemDC);
@@ -257,7 +257,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
                     dwExStyle &= ~(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
                     SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
-                    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
 
                     sx = GetSystemMetrics(SM_CXSCREEN);
                     sy = GetSystemMetrics(SM_CYSCREEN);
@@ -268,6 +267,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                     hWndRgn = CreateEllipticRgn(BorderSize, BorderSize, cx-BorderSize, cy-BorderSize);
                     SetWindowRgn(hWnd, hWndRgn, FALSE);
+                    break;
+
+                case IDM_TOPMOST:
+                    bTop = !bTop;
+                    SetWindowPos(hWnd, bTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                     break;
 
                 case IDM_BEEPOFF:
@@ -474,6 +478,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_CHECKED);
                     }else{
                         CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    if(bVisual){
+                        EnableMenuItem(hMenu, IDM_TOPMOST, MF_BYCOMMAND | MF_ENABLED);
+                    }else{
+                        EnableMenuItem(hMenu, IDM_TOPMOST, MF_BYCOMMAND | MF_GRAYED);
+                    }
+                    if(bTop){
+                        CheckMenuItem(hMenu, IDM_TOPMOST, MF_BYCOMMAND | MF_CHECKED);
+                    }else{
+                        CheckMenuItem(hMenu, IDM_TOPMOST, MF_BYCOMMAND | MF_UNCHECKED);
                     }
                     SetForegroundWindow(hWnd);
                     TrackPopupMenu(hPopupMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON, Mouse.x, Mouse.y, 0, hWnd, NULL);
