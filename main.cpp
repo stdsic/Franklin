@@ -6,8 +6,14 @@
 #pragma GCC diagnostic ignored  "-Wunused-variable"
 #define CLASS_NAME              L"Franklin"
 #define SUBCLASS_NAME           L"TodayScheduleMessageWindow"
+#define RGN_CLASS_NAME          L"VisualRgnWndClass"
 #define max(a,b)                (((a) > (b)) ? (a) : (b))
+#define min(a,b)                (((a) < (b)) ? (a) : (b))
+#define GET_X_LPARAM(lParam)    (int)(short)((lParam) & 0xFFFF)
+#define GET_Y_LPARAM(lParam)    (int)(short)((lParam) >> 16 & 0xFFFF)
 
+void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap);
+void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap, COLORREF clMask);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -22,7 +28,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
         0,0,
         hInst,
         NULL, LoadCursor(NULL, IDC_ARROW),
-        (HBRUSH)(COLOR_WINDOW + 1),
+        NULL,
         NULL,
         CLASS_NAME,
         NULL
@@ -34,12 +40,11 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
     wcex.lpfnWndProc = (WNDPROC)TodayScheduleWndProc;
     RegisterClassEx(&wcex);
 
-
     HWND hWnd = CreateWindowEx(
             WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
             CLASS_NAME,
             CLASS_NAME,
-            WS_OVERLAPPEDWINDOW,
+            WS_POPUP | WS_VISIBLE,
             0,0,0,0,
             NULL,
             (HMENU)NULL,
@@ -101,7 +106,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     TEXTMETRIC tm;
     SIZE TextSize;
-    HDC hdc;
 
     // 본래 DialogBoxParam으로 전달할 때는 static일 필요가 없다.
     // 단, 최대 개수를 32개로 정해뒀으므로 static 키워드를 붙이고 배열로 관리하기로 한다.
@@ -117,9 +121,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     HRESULT hr;
     INITCOMMONCONTROLSEX icex;
 
+    HRGN hWndRgn;
+    int sx,sy, cx,cy, BorderSize, Position;
+    static BOOL bVisual;
+
+    PAINTSTRUCT ps;
+    HDC hdc, hMemDC;
+    HGDIOBJ hOld;
+    BITMAP bmp;
+
+    static HBITMAP hBitmap;
+    static RECT rcOrigin;
+    static COLORREF clMask;
+    static int ERadius;
+
+    int iWidth, iHeight, iRadius;
+    POINT Origin;
+    HBRUSH hBrush, hOldBrush;
+    HPEN hPen, hOldPen;
+
     switch(iMessage) {
         case WM_CREATE:
             // 알림 센터에서 인식하는 모듈 ID설정
+            bVisual = FALSE;
+            ERadius = 30;
+            clMask = RGB(255,0,0);
             hr = SetCurrentProcessExplicitAppUserModelID(L"Franklin Alert");
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
             dlgret = Items = 0;
@@ -140,91 +166,85 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.uCallbackMessage = TRAY_NOTIFY;
             nid.hIcon = hAlarmClock;
             Shell_NotifyIcon(NIM_ADD, &nid);
-            SetTimer(hWnd, 1, 500, NULL);
+            SetTimer(hWnd, 1, 100, NULL);
             return 0;
 
-        case TRAY_NOTIFY:
-            switch(LOWORD(lParam)){
-                case WM_RBUTTONDOWN:
-                    hMenu = LoadMenu(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_MENU1));
-                    hPopupMenu = GetSubMenu(hMenu, 0);
-                    GetCursorPos(&Mouse);
-                    if(bAlertBeep){
-                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_CHECKED);
-                    }else{
-                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_UNCHECKED);
-                    }
-                    if(bAlertMsg){
-                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_CHECKED);
-                    }else{
-                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_UNCHECKED);
-                    }
-                    SetForegroundWindow(hWnd);
-                    TrackPopupMenu(hPopupMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON, Mouse.x, Mouse.y, 0, hWnd, NULL);
-                    SetForegroundWindow(hWnd);
-                    DestroyMenu(hPopupMenu);
-                    DestroyMenu(hMenu);
-                    break;
+        case WM_NCHITTEST:
+            if(bVisual){
+                Mouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                GetWindowRect(hWnd, &wrt);
 
-                case WM_LBUTTONDOWN:
-                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_MAKEITEM, BN_CLICKED), (LPARAM)hWnd);
-                    break;
+                if(Mouse.x >= wrt.left && Mouse.y >= wrt.top && Mouse.x <= wrt.right && Mouse.y <= wrt.bottom){
+                    return HTCAPTION;
+                }
+            }
+            break;
+
+        case WM_SIZE:
+            if(wParam != SIZE_MINIMIZED){
+                if(bVisual){
+                    if(hBitmap){
+                        DeleteObject(hBitmap);
+                        hBitmap = NULL;
+                    }
+                }
             }
             return 0;
 
-        case WM_TIMER:
+        case WM_PAINT:
+            hdc = BeginPaint(hWnd, &ps);
+            if(bVisual){
+                hMemDC = CreateCompatibleDC(hdc);
+
+                GetClientRect(hWnd, &crt);
+                if(hBitmap == NULL){
+                    hBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
+                }
+
+                hOld = SelectObject(hMemDC, hBitmap);
+                FillRect(hMemDC, &crt, GetSysColorBrush(COLOR_WINDOW));
+
+                {// Display
+                    iWidth = crt.right - crt.left;
+                    iHeight = crt.bottom - crt.top;
+                    iRadius = min(iWidth, iHeight) >> 1;
+
+                    POINT Origin = {iWidth >> 1, iHeight >> 1};
+
+                    hBrush = CreateSolidBrush(clMask);
+                    hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
+                    hPen = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+                    hOldPen = (HPEN)SelectObject(hMemDC, hPen);
+
+                    Ellipse(hMemDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
+                    SetRect(&rcOrigin, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
+
+                    SelectObject(hMemDC, hOldBrush);
+                    SelectObject(hMemDC, hOldPen);
+                    DeleteObject(hBrush);
+                    DeleteObject(hPen);
+                }
+
+
+                GetObject(hBitmap, sizeof(BITMAP), &bmp);
+                TransparentBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, bmp.bmWidth, bmp.bmHeight, clMask);
+
+                SelectObject(hMemDC, hOld);
+                DeleteDC(hMemDC);
+            }
+            EndPaint(hWnd, &ps);
+            return 0;
+
+        case WM_KEYDOWN:
             switch(wParam){
-                case 1:
-                    GetLocalTime(&st);
-                    for(int i=0; i<Items; i++){
-                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute && param[i].bFlag == FALSE){
-                            param[i].bFlag = TRUE;
-                            if(bAlertMsg){
-                                dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
-                                dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
-
-                                SetRect(&crt, 0,0, 300, 200);
-                                AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
-
-                                SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
-
-                                ScreenWidth		= WorkArea.right - WorkArea.left;
-                                ScreenHeight	= WorkArea.bottom - WorkArea.top;
-
-                                memset(&abData, 0, sizeof(abData));
-                                abData.cbSize = sizeof(abData);
-                                if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
-                                    GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
-                                }
-
-                                TaskBarHeight	= abData.rc.bottom - abData.rc.top;
-                                Width			= crt.right - crt.left;
-                                Height			= crt.bottom - crt.top;
-                                x				= ScreenWidth - Width >> 1;
-                                y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
-
-                                if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); AlertWnd[i] = NULL; }
-                                AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
-                                memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
-                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
-                                SendMessage(AlertWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[i]);
-                            }
-
-                            if(bAlertBeep){
-                                BeepCnt = 0;
-                                SetTimer(hWnd, 2, 5000, NULL);
-                                SendMessage(hWnd, WM_TIMER, 2, 0);
-                            }
-                        }
-                    }
-                    break;
-
-                case 2:
-                    if(BeepCnt < 12){
-                        MessageBeep(0);
-                        BeepCnt++;
-                    }else{
-                        KillTimer(hWnd, 2);
+                case VK_ESCAPE:
+                    if(bVisual){
+                        KillTimer(hWnd, 3);
+                        bVisual = FALSE;
+                        dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+                        dwExStyle |= (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+                        SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
+                        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW);
                     }
                     break;
             }
@@ -232,6 +252,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
         case WM_COMMAND:
             switch(LOWORD(wParam)){
+                case IDM_VISUAL:
+                    bVisual = TRUE;
+                    dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+                    dwExStyle &= ~(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+                    SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
+                    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+
+                    sx = GetSystemMetrics(SM_CXSCREEN);
+                    sy = GetSystemMetrics(SM_CYSCREEN);
+                    BorderSize = GetSystemMetrics(SM_CXEDGE);
+
+                    cx = cy = 400;
+                    SetWindowPos(hWnd, NULL, sx - cx, 0, cx, cy, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+                    hWndRgn = CreateEllipticRgn(BorderSize, BorderSize, cx-BorderSize, cy-BorderSize);
+                    SetWindowRgn(hWnd, hWndRgn, FALSE);
+                    break;
+
                 case IDM_BEEPOFF:
                     KillTimer(hWnd, 2);
                     break;
@@ -421,8 +459,122 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             }
             return 0;
 
+        case TRAY_NOTIFY:
+            switch(LOWORD(lParam)){
+                case WM_RBUTTONDOWN:
+                    hMenu = LoadMenu(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_MENU1));
+                    hPopupMenu = GetSubMenu(hMenu, 0);
+                    GetCursorPos(&Mouse);
+                    if(bAlertBeep){
+                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_CHECKED);
+                    }else{
+                        CheckMenuItem(hMenu, IDM_ALERTBEEP, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    if(bAlertMsg){
+                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_CHECKED);
+                    }else{
+                        CheckMenuItem(hMenu, IDM_ALERTMSG, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    SetForegroundWindow(hWnd);
+                    TrackPopupMenu(hPopupMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON, Mouse.x, Mouse.y, 0, hWnd, NULL);
+                    SetForegroundWindow(hWnd);
+                    DestroyMenu(hPopupMenu);
+                    DestroyMenu(hMenu);
+                    break;
+
+                case WM_LBUTTONDOWN:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_MAKEITEM, BN_CLICKED), (LPARAM)hWnd);
+                    break;
+            }
+            return 0;
+
+        case WM_TIMER:
+            switch(wParam){
+                case 1:
+                    GetLocalTime(&st);
+                    for(int i=0; i<Items; i++){
+                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute && param[i].bFlag == FALSE){
+                            param[i].bFlag = TRUE;
+                            if(bAlertMsg){
+                                dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
+                                dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
+
+                                SetRect(&crt, 0,0, 300, 200);
+                                AdjustWindowRectEx(&crt, dwStyle, FALSE, dwExStyle);
+
+                                SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
+
+                                ScreenWidth		= WorkArea.right - WorkArea.left;
+                                ScreenHeight	= WorkArea.bottom - WorkArea.top;
+
+                                memset(&abData, 0, sizeof(abData));
+                                abData.cbSize = sizeof(abData);
+                                if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
+                                    GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
+                                }
+
+                                TaskBarHeight	= abData.rc.bottom - abData.rc.top;
+                                Width			= crt.right - crt.left;
+                                Height			= crt.bottom - crt.top;
+                                x				= ScreenWidth - Width >> 1;
+                                y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
+
+                                if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); AlertWnd[i] = NULL; }
+                                AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+                                memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
+                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+                                SendMessage(AlertWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[i]);
+                            }
+
+                            if(bAlertBeep){
+                                BeepCnt = 0;
+                                SetTimer(hWnd, 2, 5000, NULL);
+                                SendMessage(hWnd, WM_TIMER, 2, 0);
+                            }
+                        }
+                    }
+                    break;
+
+                case 2:
+                    if(BeepCnt < 12){
+                        MessageBeep(0);
+                        BeepCnt++;
+                    }else{
+                        KillTimer(hWnd, 2);
+                    }
+                    break;
+            }
+            return 0;
+
+        case WM_WINDOWPOSCHANGING:
+            {
+                MONITORINFOEX miex;
+                memset(&miex, 0, sizeof(miex));
+                miex.cbSize = sizeof(miex);
+
+                HMONITOR hCurrentMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                GetMonitorInfo(hCurrentMonitor, &miex);
+
+                LPWINDOWPOS lpwp = (LPWINDOWPOS)lParam;
+                int SideSnap = 10;
+
+                if (abs(lpwp->x - miex.rcMonitor.left) < SideSnap) {
+                    lpwp->x = miex.rcMonitor.left;
+                } else if (abs(lpwp->x + lpwp->cx - miex.rcMonitor.right) < SideSnap) {
+                    lpwp->x = miex.rcMonitor.right - lpwp->cx;
+                } 
+                if (abs(lpwp->y - miex.rcMonitor.top) < SideSnap) {
+                    lpwp->y = miex.rcMonitor.top;
+                } else if (abs(lpwp->y + lpwp->cy - miex.rcMonitor.bottom) < SideSnap) {
+                    lpwp->y = miex.rcMonitor.bottom - lpwp->cy;
+                }
+            }
+            return 0;
+
         case WM_DESTROY:
+            if(hBitmap){DeleteObject(hBitmap);}
             KillTimer(hWnd, 1);
+            KillTimer(hWnd, 2);
             nid.cbSize = sizeof(NOTIFYICONDATA);
             nid.hWnd = hWnd;
             nid.uID = 1201;
@@ -687,4 +839,31 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     }
 
     return FALSE;
+}
+
+void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap){
+    HDC hMemDC = CreateCompatibleDC(hdc);
+    HGDIOBJ hOld = SelectObject(hMemDC, hOld);
+
+    BITMAP bmp;
+    GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+    BitBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+
+    SelectObject(hMemDC, hOld);
+    DeleteDC(hMemDC);
+
+}
+
+void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap, COLORREF clMask){
+    HDC hMemDC = CreateCompatibleDC(hdc);
+    HGDIOBJ hOld = SelectObject(hMemDC, hOld);
+
+    BITMAP bmp;
+    GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+    TransparentBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, bmp.bmWidth, bmp.bmHeight, clMask);
+
+    SelectObject(hMemDC, hOld);
+    DeleteDC(hMemDC);
 }
