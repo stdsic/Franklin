@@ -2,6 +2,7 @@
 #include "resource.h"
 #include <shobjidl.h>
 #include <commctrl.h>
+#include <math.h>
 #pragma GCC diagnostic ignored  "-Wunused-parameter"
 #pragma GCC diagnostic ignored  "-Wunused-variable"
 #define CLASS_NAME              L"Franklin"
@@ -12,8 +13,12 @@
 #define GET_X_LPARAM(lParam)    (int)(short)((lParam) & 0xFFFF)
 #define GET_Y_LPARAM(lParam)    (int)(short)((lParam) >> 16 & 0xFFFF)
 
-void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap);
-void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap, COLORREF clMask);
+typedef struct tag_Tick {
+    float x, y;
+}Tick;
+
+void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
+void DrawTick(HDC hdc, POINT Origin, int iRaiuds);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -70,6 +75,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 typedef struct tag_inParam{
     int Hour, Minute;
     BOOL bFlag;
+    COLORREF color;
     WCHAR Message[0x100];
 }InputParam;
 
@@ -141,9 +147,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     HPEN hPen, hOldPen;
     static BOOL bTop;
 
+    float AngleStart, AngleEnd;
+    WORD lwParam;
+    int Next;
+
     switch(iMessage) {
         case WM_CREATE:
             // 알림 센터에서 인식하는 모듈 ID설정
+            srand((unsigned int)GetTickCount());
             bTop = bVisual = FALSE;
             ERadius = 10;
             clMask = RGB(255,0,0);
@@ -205,13 +216,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 hOld = SelectObject(hMemDC, hBitmap);
                 FillRect(hMemDC, &crt, GetSysColorBrush(COLOR_WINDOW));
 
-                {// Display
-                    iWidth = crt.right - crt.left;
-                    iHeight = crt.bottom - crt.top;
-                    iRadius = min(iWidth, iHeight) >> 1;
+                iWidth = crt.right - crt.left;
+                iHeight = crt.bottom - crt.top;
+                iRadius = min(iWidth, iHeight) >> 1;
 
-                    POINT Origin = {iWidth >> 1, iHeight >> 1};
+                POINT Origin = {iWidth >> 1, iHeight >> 1};
 
+                {// Draw Pie
+                    for(int i=0; i<Items; i++){
+                        AngleStart = param[i].Hour % 12 * 30.f + param[i].Minute % 60 * 6.f;
+                        AngleEnd = param[(i + 1) % Items].Hour % 12 * 30.f + param[(i + 1) % Items].Minute % 60 * 6.f;
+
+                        DrawPiece(hMemDC, Origin, iRadius, AngleStart, AngleEnd, param[i].color);
+                    }
+                }
+
+                {// Draw Tick
+                    DrawTick(hMemDC, Origin, iRadius);
+                }
+
+                {// Draw Origin Circle
                     hBrush = CreateSolidBrush(clMask);
                     hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
                     hPen = CreatePen(PS_SOLID, 1, RGB(0,0,0));
@@ -242,7 +266,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         KillTimer(hWnd, 3);
                         bVisual = FALSE;
                         dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
-                        dwExStyle |= (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+                        dwExStyle |= WS_EX_NOACTIVATE;
                         SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
                         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_HIDEWINDOW);
                     }
@@ -251,11 +275,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_COMMAND:
-            switch(LOWORD(wParam)){
+            lwParam = LOWORD(wParam);
+            switch(lwParam){
                 case IDM_VISUAL:
                     bVisual = TRUE;
                     dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
-                    dwExStyle &= ~(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+                    dwExStyle &= ~WS_EX_NOACTIVATE;
                     SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
 
                     sx = GetSystemMetrics(SM_CXSCREEN);
@@ -460,6 +485,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case IDM_EXIT:
                     DestroyWindow(hWnd);
                     break;
+            }
+
+            if(bVisual && (lwParam == IDM_MAKEITEM || lwParam == IDM_CLEARPAST || lwParam == IDM_DELETEITEM)){
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             return 0;
 
@@ -756,6 +785,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     if(ret != NULL){
                         ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE);
                         ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE);
+                        ret->color = RGB(rand() % 106 + 150, rand() % 106 + 150, rand() % 106 + 150);
                         GetDlgItemText(hDlg, IDC_ITEMEDIT3, ret->Message, 0x100);
                     }else{
                         MessageBox(hDlg, L"전달된 매개변수를 읽지 못했습니다.\r\n다시 시도해주세요.", L"에러", MB_ICONERROR | MB_OK);
@@ -855,29 +885,58 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     return FALSE;
 }
 
-void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap){
-    HDC hMemDC = CreateCompatibleDC(hdc);
-    HGDIOBJ hOld = SelectObject(hMemDC, hOld);
+void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color) {
+	float PI = atan(1.f) * 4.f;
+	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
 
-    BITMAP bmp;
-    GetObject(hBitmap, sizeof(BITMAP), &bmp);
+    int Left   = Origin.x - Radius;
+    int Top    = Origin.y - Radius;
+    int Right  = Origin.x + Radius;
+    int Bottom = Origin.y + Radius;
 
-    BitBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+    // 0도 : 12시
+    // 회전: 시계 방향
+    float AngleStartRad = fmod((Circle - AngleStartDeg) + Quarter, Circle) * PI / Half;
+    float AngleEndRad = fmod((Circle - AngleEndDeg) + Quarter, Circle) * PI / Half;
 
-    SelectObject(hMemDC, hOld);
-    DeleteDC(hMemDC);
+    int x1 = (int)(Origin.x + Radius * cos(AngleStartRad));
+    int y1 = (int)(Origin.y - Radius * sin(AngleStartRad));
+    int x2 = (int)(Origin.x + Radius * cos(AngleEndRad));
+    int y2 = (int)(Origin.y - Radius * sin(AngleEndRad));
 
+    if (x1 == x2 && y1 == y2) return;
+
+    HBRUSH hBrush = CreateSolidBrush(color);
+    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+
+    // 순서 주의
+    Pie(hdc, Left, Top, Right, Bottom, x2, y2, x1, y1);
+
+    SelectObject(hdc, hOldBrush);
+    DeleteObject(hBrush);
 }
 
-void DrawBitmap(HDC hdc, int x, int y, HBITMAP hBitmap, COLORREF clMask){
-    HDC hMemDC = CreateCompatibleDC(hdc);
-    HGDIOBJ hOld = SelectObject(hMemDC, hOld);
+void DrawTick(HDC hdc, POINT Origin, int iRadius){
+	float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
+	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
 
-    BITMAP bmp;
-    GetObject(hBitmap, sizeof(BITMAP), &bmp);
+    HPEN hPen = CreatePen(PS_SOLID, 3, RGB(0,0,0));
+	HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
 
-    TransparentBlt(hdc, x,y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, bmp.bmWidth, bmp.bmHeight, clMask);
+	for(int i=0; i<12; i++){
+		fRadian = fmod((float)(30.f * i) + ThreeQuarter, Circle) * PI / Half;
+		cosf = cos(fRadian);
+		sinf = sin(fRadian);
 
-    SelectObject(hMemDC, hOld);
-    DeleteDC(hMemDC);
+		Tick pt1 = {Origin.x + iRadius * 0.98f * cosf, Origin.y + iRadius * 0.98f * sinf};
+		Tick pt2 = {Origin.x + iRadius * 0.9f * cosf, Origin.y + iRadius * 0.9f * sinf};
+
+		MoveToEx(hdc, pt1.x, pt1.y, NULL);
+		LineTo(hdc, pt2.x, pt2.y);
+	}
+
+	SelectObject(hdc, hOldPen);
+    DeleteObject(hPen);
 }
+
+
