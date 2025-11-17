@@ -13,12 +13,6 @@
 #define GET_X_LPARAM(lParam)    (int)(short)((lParam) & 0xFFFF)
 #define GET_Y_LPARAM(lParam)    (int)(short)((lParam) >> 16 & 0xFFFF)
 
-typedef struct tag_Tick {
-    float x, y;
-}Tick;
-
-void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
-void DrawTick(HDC hdc, POINT Origin, int iRaiuds);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -72,10 +66,13 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 #define TRAY_NOTIFY         (WM_APP + 1)
 #define WM_TODAYSCHEDULE	(WM_APP + 2)
 
+typedef enum tag_Part { AM, PM } Part;
+
 typedef struct tag_inParam{
     int Hour, Minute;
     BOOL bFlag;
     COLORREF color;
+    Part VisualPart;
     WCHAR Message[0x100];
 }InputParam;
 
@@ -83,6 +80,18 @@ typedef struct tag_outParam{
     int nItems, nDelete;
     InputParam *ptr;
 }OutputParam;
+
+typedef struct tag_Tick {
+    float x, y;
+}Tick;
+
+void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
+void DrawTick(HDC hdc, POINT Origin, int iRaiuds);
+
+FLOAT FixedToFloat(ULONG Dividend);
+ULONG GetMagicNumber(ULONG Divisor);
+ULONG MyDiv(ULONG Dividend, ULONG Magic);
+ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
@@ -148,16 +157,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     static BOOL bTop;
 
     float AngleStart, AngleEnd;
+    float HourAngle, MinuteAngle;
+    int ItemHour, ItemMinute, ItemVisualPart;
+
     WORD lwParam;
     int Next;
 
+    static Part CurrentVisualPart;
+
+    int prevMode;
+    COLORREF prevColor;
+    static SIZE PartTextSize;
+
+    static ULONG minMagic, hourMagic;
+    ULONG uHourMod, uMinuteMod;
+
     switch(iMessage) {
         case WM_CREATE:
-            // 알림 센터에서 인식하는 모듈 ID설정
+            minMagic = GetMagicNumber(60);
+            hourMagic = GetMagicNumber(12);
+            CurrentVisualPart = AM;
+            hdc = GetDC(hWnd);
+            GetTextExtentPoint32(hdc, L"AM", 2, &PartTextSize);
+            ReleaseDC(hWnd, hdc);
             srand((unsigned int)GetTickCount());
             bTop = bVisual = FALSE;
-            ERadius = 10;
-            clMask = RGB(255,0,0);
+            ERadius = max(PartTextSize.cx, PartTextSize.cy) + 8 >> 1;
+            clMask = RGB(255, 165, 0);
+
+            // 알림 센터에서 인식하는 모듈 ID설정
             hr = SetCurrentProcessExplicitAppUserModelID(L"Franklin Alert");
             bBeepSnd = bAlertMsg = bAlertBeep = TRUE;
             dlgret = Items = 0;
@@ -181,28 +209,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             SetTimer(hWnd, 1, 100, NULL);
             return 0;
 
-        case WM_NCHITTEST:
-            if(bVisual){
-                Mouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                GetWindowRect(hWnd, &wrt);
-
-                if(Mouse.x >= wrt.left && Mouse.y >= wrt.top && Mouse.x <= wrt.right && Mouse.y <= wrt.bottom){
-                    return HTCAPTION;
-                }
-            }
-            break;
-
-        case WM_SIZE:
-            if(wParam != SIZE_MINIMIZED){
-                if(bVisual){
-                    if(hBitmap){
-                        DeleteObject(hBitmap);
-                        hBitmap = NULL;
-                    }
-                }
-            }
-            return 0;
-
         case WM_PAINT:
             hdc = BeginPaint(hWnd, &ps);
             if(bVisual){
@@ -220,14 +226,46 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 iHeight = crt.bottom - crt.top;
                 iRadius = min(iWidth, iHeight) >> 1;
 
-                POINT Origin = {iWidth >> 1, iHeight >> 1};
+                Origin = {iWidth >> 1, iHeight >> 1};
 
                 {// Draw Pie
                     for(int i=0; i<Items; i++){
-                        AngleStart = param[i].Hour % 12 * 30.f + param[i].Minute % 60 * 6.f;
-                        AngleEnd = param[(i + 1) % Items].Hour % 12 * 30.f + param[(i + 1) % Items].Minute % 60 * 6.f;
+                        ItemVisualPart = param[i].VisualPart;
+                        if(ItemVisualPart != CurrentVisualPart){ continue; }
 
-                        DrawPiece(hMemDC, Origin, iRadius, AngleStart, AngleEnd, param[i].color);
+                        Next = (i + 1) % Items;
+                        if(Next){
+                            ItemHour = param[i].Hour;
+                            ItemMinute = param[i].Minute;
+
+                            uHourMod = MyMod(ItemHour, hourMagic, 12);
+                            HourAngle = (FLOAT)uHourMod * 30.f;
+
+                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / FixedToFloat(uMinuteMod) : 0.f);
+
+                            AngleStart = HourAngle + MinuteAngle;
+
+                            ItemHour = param[(i + 1) % Items].Hour;
+                            ItemMinute = param[(i + 1) % Items].Minute;
+
+                            uHourMod = MyMod(ItemHour, hourMagic, 12);
+                            HourAngle = (FLOAT)uHourMod * 30.f;
+
+                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / FixedToFloat(uMinuteMod) : 0.f);
+
+                            AngleEnd = HourAngle + MinuteAngle;
+
+                            /*
+                            HourAngle = ItemHour % 12 * 30.f;
+                            MinuteAngle = ItemMinute % 60;
+                            MinuteAngle = ((MinuteAngle) > 0.f ?  900.f / MinuteAngle : 0.f);
+                            AngleEnd = HourAngle + MinuteAngle;
+                            */
+
+                            DrawPiece(hMemDC, Origin, iRadius, AngleStart, AngleEnd, param[i].color);
+                        }
                     }
                 }
 
@@ -241,9 +279,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     hPen = CreatePen(PS_SOLID, 1, RGB(0,0,0));
                     hOldPen = (HPEN)SelectObject(hMemDC, hPen);
 
+                    prevMode = SetBkMode(hMemDC, TRANSPARENT);
+                    prevColor = SetTextColor(hMemDC, RGB(0,0,0));
+
                     Ellipse(hMemDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
                     SetRect(&rcOrigin, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
 
+                    TextOut(hMemDC, Origin.x - PartTextSize.cx * 0.5, Origin.y - PartTextSize.cy * 0.5, (CurrentVisualPart == AM) ? L"AM" : L"PM", 2);
+
+                    SetBkMode(hMemDC, prevMode);
+                    SetTextColor(hMemDC, prevColor);
                     SelectObject(hMemDC, hOldBrush);
                     SelectObject(hMemDC, hOldPen);
                     DeleteObject(hBrush);
@@ -257,6 +302,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 DeleteDC(hMemDC);
             }
             EndPaint(hWnd, &ps);
+            return 0;
+
+        case WM_LBUTTONDOWN:
+            CurrentVisualPart = (Part)((CurrentVisualPart + 1) % 2);
+            clMask = (CurrentVisualPart == AM) ? RGB(255, 165, 0) : RGB(135, 206, 235);
+            InvalidateRect(hWnd, NULL, FALSE);
+            return 0;
+
+        case WM_NCHITTEST:
+            if(bVisual){
+                Mouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                GetWindowRect(hWnd, &wrt);
+
+                if(Mouse.x >= wrt.left && Mouse.y >= wrt.top && Mouse.x <= wrt.right && Mouse.y <= wrt.bottom){
+                    ScreenToClient(hWnd, &Mouse);
+                    if(PtInRect(&rcOrigin, Mouse)){
+                        return HTCLIENT;
+                    }
+                    return HTCAPTION;
+                }
+            }
+            break;
+
+        case WM_SIZE:
+            if(wParam != SIZE_MINIMIZED){
+                if(bVisual){
+                    if(hBitmap){
+                        DeleteObject(hBitmap);
+                        hBitmap = NULL;
+                    }
+                }
+            }
             return 0;
 
         case WM_KEYDOWN:
@@ -786,6 +863,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE);
                         ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE);
                         ret->color = RGB(rand() % 106 + 150, rand() % 106 + 150, rand() % 106 + 150);
+                        ret->VisualPart = (((ret->Hour) / 12) & 1) ? PM : AM;
                         GetDlgItemText(hDlg, IDC_ITEMEDIT3, ret->Message, 0x100);
                     }else{
                         MessageBox(hDlg, L"전달된 매개변수를 읽지 못했습니다.\r\n다시 시도해주세요.", L"에러", MB_ICONERROR | MB_OK);
@@ -939,4 +1017,28 @@ void DrawTick(HDC hdc, POINT Origin, int iRadius){
     DeleteObject(hPen);
 }
 
+#define FIXED_SHIFT 32
+#define FIXED_POINT (1ULL << FIXED_SHIFT)
+FLOAT FixedToFloat(ULONG Dividend){
+    return (FLOAT)(((ULONGLONG)Dividend * 255) >> 40);
+}
 
+ULONG GetMagicNumber(ULONG Divisor){
+    // (2^32 + (Divisor - 1)) / Divisor;
+    return ((ULONGLONG)FIXED_POINT + (Divisor - 1)) / Divisor;
+}
+
+ULONG MyDiv(ULONG Dividend, ULONG Magic){
+    return ((ULONGLONG)Dividend * Magic) >> FIXED_SHIFT;
+}
+
+ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor){
+    if(Divisor == 0){ return 0; }
+    ULONG Quotient = ((ULONGLONG)Dividend * Magic) >> FIXED_SHIFT;
+    ULONG Remainder = Dividend - (Quotient * Divisor);
+
+    if(Remainder >= Divisor){ Remainder -= Divisor; }
+    if(Remainder < 0){ Remainder += Divisor; }
+
+    return Remainder;
+}
