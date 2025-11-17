@@ -175,7 +175,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
         case WM_CREATE:
             minMagic = GetMagicNumber(60);
             hourMagic = GetMagicNumber(12);
-            CurrentVisualPart = AM;
+            GetLocalTime(&st);
+            CurrentVisualPart = (st.wHour < 12) ? AM : PM;
             hdc = GetDC(hWnd);
             GetTextExtentPoint32(hdc, L"AM", 2, &PartTextSize);
             ReleaseDC(hWnd, hdc);
@@ -232,39 +233,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         ItemVisualPart = param[i].VisualPart;
                         if(ItemVisualPart != CurrentVisualPart){ continue; }
 
-                        Next = (i + 1) % Items;
-                        if(Next){
-                            ItemHour = param[i].Hour;
-                            ItemMinute = param[i].Minute;
+                        ItemHour = param[i].Hour;
+                        ItemMinute = param[i].Minute;
 
-                            uHourMod = MyMod(ItemHour, hourMagic, 12);
-                            HourAngle = (FLOAT)uHourMod * 30.f;
+                        uHourMod = MyMod(ItemHour, hourMagic, 12);
+                        HourAngle = (FLOAT)uHourMod * 30.f;
 
-                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
+                        uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                        MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
 
-                            AngleStart = HourAngle + MinuteAngle;
+                        AngleStart = HourAngle + MinuteAngle;
 
-                            ItemHour = param[(i + 1) % Items].Hour;
-                            ItemMinute = param[(i + 1) % Items].Minute;
+                        ItemHour = param[(i + 1) % Items].Hour;
+                        ItemMinute = param[(i + 1) % Items].Minute;
 
-                            uHourMod = MyMod(ItemHour, hourMagic, 12);
-                            HourAngle = (FLOAT)uHourMod * 30.f;
+                        uHourMod = MyMod(ItemHour, hourMagic, 12);
+                        HourAngle = (FLOAT)uHourMod * 30.f;
 
-                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
+                        uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                        MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
 
-                            AngleEnd = HourAngle + MinuteAngle;
+                        AngleEnd = HourAngle + MinuteAngle;
 
-                            /*
-                            HourAngle = ItemHour % 12 * 30.f;
-                            MinuteAngle = ItemMinute % 60;
-                            MinuteAngle = ((MinuteAngle) > 0.f ?  900.f / MinuteAngle : 0.f);
-                            AngleEnd = HourAngle + MinuteAngle;
-                            */
+                        /*
+                        HourAngle = ItemHour % 12 * 30.f;
+                        MinuteAngle = ItemMinute % 60;
+                        MinuteAngle = ((MinuteAngle) > 0.f ?  900.f / MinuteAngle : 0.f);
+                        AngleEnd = HourAngle + MinuteAngle;
+                        */
 
-                            DrawPiece(hMemDC, Origin, iRadius, AngleStart, AngleEnd, param[i].color);
-                        }
+                        DrawPiece(hMemDC, Origin, iRadius, AngleStart, ((AngleStart == AngleEnd) ? 360.f : AngleEnd), param[i].color);
                     }
                 }
 
@@ -981,7 +979,7 @@ void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float Ang
     int x2 = (int)(Origin.x + Radius * cos(AngleEndRad));
     int y2 = (int)(Origin.y - Radius * sin(AngleEndRad));
 
-    if (x1 == x2 && y1 == y2) return;
+    // if (x1 == x2 && y1 == y2) return;
 
     HBRUSH hBrush = CreateSolidBrush(color);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
@@ -1037,3 +1035,6 @@ ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor){
 
     return Remainder;
 }
+
+// TODO : DrawPiece 함수 수정 필요 -> AM, PM 구분을 위해 12시 방향(360도) 넘어가지 않도록 조정
+// TODO : 오전, 오후 알람표 자동 교체 기능 추가 예정 -> 프로그램 실행 시작 시간 저장 필요 -> 절대시간으로 저장 후 타이머 이용
