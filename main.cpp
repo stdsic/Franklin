@@ -88,7 +88,6 @@ typedef struct tag_Tick {
 void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
 void DrawTick(HDC hdc, POINT Origin, int iRaiuds);
 
-FLOAT FixedToFloat(ULONG Dividend);
 ULONG GetMagicNumber(ULONG Divisor);
 ULONG MyDiv(ULONG Dividend, ULONG Magic);
 ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor);
@@ -242,7 +241,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             HourAngle = (FLOAT)uHourMod * 30.f;
 
                             uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / FixedToFloat(uMinuteMod) : 0.f);
+                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
 
                             AngleStart = HourAngle + MinuteAngle;
 
@@ -253,7 +252,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             HourAngle = (FLOAT)uHourMod * 30.f;
 
                             uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / FixedToFloat(uMinuteMod) : 0.f);
+                            MinuteAngle = ((uMinuteMod > 0) ? 900.f / (FLOAT)(uMinuteMod) : 0.f);
 
                             AngleEnd = HourAngle + MinuteAngle;
 
@@ -1019,10 +1018,6 @@ void DrawTick(HDC hdc, POINT Origin, int iRadius){
 
 #define FIXED_SHIFT 32
 #define FIXED_POINT (1ULL << FIXED_SHIFT)
-FLOAT FixedToFloat(ULONG Dividend){
-    return (FLOAT)(((ULONGLONG)Dividend * 255) >> 40);
-}
-
 ULONG GetMagicNumber(ULONG Divisor){
     // (2^32 + (Divisor - 1)) / Divisor;
     return ((ULONGLONG)FIXED_POINT + (Divisor - 1)) / Divisor;
