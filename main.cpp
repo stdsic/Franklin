@@ -332,7 +332,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 }
 
                 {// Check BkColor;
-                    BkColor = GetAverageColor(hTempDC, Origin.x, Origin.y, ERadius * 1.5f);
+                    BkColor = GetAverageColor(hTempDC, Origin.x, Origin.y, iRadius * 0.2f);
                     IsDark = IsColorDark(BkColor);
                 }
 
@@ -1232,12 +1232,12 @@ COLORREF GetAverageColor(HDC hdc, int x, int y, int rad){
 		 b	= 0;
 
 	int cnt = 0,
-		SampleX[] = {x, x - rad, x + rad},
-		SampleY[] = {y, y - rad, y + rad};
+		SampleX[] = {x - rad * 2, x - rad, x + rad, x + rad * 2},
+		SampleY[] = {y - rad * 2, y - rad, y + rad, y + rad * 2};
 
 	COLORREF color;
-	for (int i=0; i<3; i++){
-		for (int j=0; j<3; j++){
+	for (int i=0; i<4; i++){
+		for (int j=0; j<4; j++){
 			color = GetPixel(hdc, SampleX[i], SampleY[j]);
 			r += GetRValue(color);
 			g += GetGValue(color);
