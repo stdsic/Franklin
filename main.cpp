@@ -3,6 +3,9 @@
 #include <shobjidl.h>
 #include <commctrl.h>
 #include <math.h>
+#include <gdiplus.h>
+using namespace Gdiplus;
+
 #pragma GCC diagnostic ignored  "-Wunused-parameter"
 #pragma GCC diagnostic ignored  "-Wunused-variable"
 #define CLASS_NAME              L"Franklin"
@@ -86,25 +89,25 @@ typedef struct tag_Tick {
 }Tick;
 
 typedef struct tag_bwAttributes{
-	COLORREF	rgb;
-	BYTE		Opacity;
-	DWORD		Flags;
+    COLORREF	rgb;
+    BYTE		Opacity;
+    DWORD		Flags;
 }bwAttributes;
 
 void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
-void DrawTick(HDC hdc, POINT Origin, int iRadius, COLORREF clMask = RGB(255,255,255));
-void DrawHand(HDC hdc, POINT Origin, int iRadius);
+void DrawBkPaper(HDC hdc, POINT Origin, int iRadius, HBITMAP hBitmap);
+void DrawOutLine(HDC hdc, POINT Origin, int iRadius);
+void DrawTick(HDC hdc, POINT Origin, int iRadius, BOOL IsDark);
+void DrawHand(HDC hdc, POINT Origin, int iRadius, BOOL IsDark);
+COLORREF GetAverageColor(HDC hdc, int x, int y, int rad);
+BOOL IsColorDark(COLORREF color);
+HBITMAP LoadFile();
 
 ULONG GetMagicNumber(ULONG Divisor);
 ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor);
-
-void SetAttribute(HWND hWnd, bwAttributes Attr){
-	SetLayeredWindowAttributes(hWnd, Attr.rgb, Attr.Opacity, Attr.Flags);
-}
-
-void GetAttribute(HWND hWnd, bwAttributes *Attr){
-	GetLayeredWindowAttributes(hWnd, &Attr->rgb, &Attr->Opacity, &Attr->Flags);
-}
+void SetAttribute(HWND hWnd, bwAttributes Attr);
+void GetAttribute(HWND hWnd, bwAttributes *Attr);
+void InsertionSort(InputParam *DataSet, int Length);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
@@ -160,7 +163,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     static HBITMAP hBitmap;
     static RECT rcOrigin;
-    static COLORREF CircleColor;
+    static COLORREF CircleColor, AmColor, PmColor;
     static int ERadius;
 
     int iWidth, iHeight, iRadius;
@@ -185,16 +188,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     static ULONG minMagic, hourMagic;
     ULONG uHourMod, uMinuteMod;
 
-    static COLORREF clMask;
+    static COLORREF clMask, clWhite, clBlack;
     static bwAttributes Attr;
     static HBITMAP hTempBitmap;
     HDC hTempDC;
     HGDIOBJ hTempOld;
 
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    static HBITMAP hBkBitmap;
+    HBITMAP hNewBitmap;
+    COLORREF BkColor;
+    BOOL IsDark;
+
     switch(iMessage) {
         case WM_CREATE:
+            GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+            clWhite = RGB(255, 255, 255);
+            clBlack = RGB(0, 0, 0);
+
             clMask = RGB(128, 128, 128);
-            Attr = {clMask, 254, LWA_ALPHA | LWA_COLORKEY};
+            Attr = {clMask, 255, LWA_ALPHA | LWA_COLORKEY};
             SetAttribute(hWnd, Attr);
 
             minMagic = GetMagicNumber(60);
@@ -202,7 +217,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
             GetLocalTime(&st);
             CurrentVisualPart = (st.wHour < 12) ? AM : PM;
-            CircleColor = (CurrentVisualPart == AM) ? RGB(255, 165, 0) : RGB(135, 206, 235);
+
+            AmColor = RGB(255, 165, 0);
+            PmColor = RGB(135, 206, 235);
+            CircleColor = (CurrentVisualPart == AM) ? AmColor : PmColor;
 
             hdc = GetDC(hWnd);
             GetTextExtentPoint32(hdc, L"AM", 2, &PartTextSize);
@@ -246,7 +264,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 GetClientRect(hWnd, &crt);
                 if(hBitmap == NULL){
                     hBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
-					hTempBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
+                    hTempBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
                 }
                 hOld = SelectObject(hMemDC, hBitmap);
                 hTempOld = SelectObject(hTempDC, hTempBitmap);
@@ -279,24 +297,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         AngleStart = HourAngle + MinuteAngle;
 
                         /*
-                        ItemHour = param[(i + 1) % Items].Hour;
-                        ItemMinute = param[(i + 1) % Items].Minute;
+                           ItemHour = param[(i + 1) % Items].Hour;
+                           ItemMinute = param[(i + 1) % Items].Minute;
 
-                        uHourMod = MyMod(ItemHour, hourMagic, 12);
-                        HourAngle = (FLOAT)uHourMod * 30.f;
+                           uHourMod = MyMod(ItemHour, hourMagic, 12);
+                           HourAngle = (FLOAT)uHourMod * 30.f;
 
-                        uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                        MinuteAngle = ((uMinuteMod > 0) ? 30.f / 60.f * (FLOAT)(uMinuteMod) : 0.f);
+                           uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                           MinuteAngle = ((uMinuteMod > 0) ? 30.f / 60.f * (FLOAT)(uMinuteMod) : 0.f);
 
-                        AngleEnd = HourAngle + MinuteAngle;
-                        */
+                           AngleEnd = HourAngle + MinuteAngle;
+                         */
 
                         /*
-                        HourAngle = ItemHour % 12 * 30.f;
-                        MinuteAngle = ItemMinute % 60;
-                        MinuteAngle = ((MinuteAngle) > 0.f ?  30.f / 60.f * MinuteAngle : 0.f);
-                        AngleStart = HourAngle + MinuteAngle;
-                        */
+                           HourAngle = ItemHour % 12 * 30.f;
+                           MinuteAngle = ItemMinute % 60;
+                           MinuteAngle = ((MinuteAngle) > 0.f ?  30.f / 60.f * MinuteAngle : 0.f);
+                           AngleStart = HourAngle + MinuteAngle;
+                         */
 
                         // 아예 고정시키는거로 결정
                         DrawPiece(hTempDC, Origin, iRadius, AngleStart, 360.f, param[i].color);
@@ -305,15 +323,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     }
                 }
 
+                {// Draw OutLine
+                    DrawOutLine(hTempDC, Origin, iRadius);
+                }
+
+                if(hBkBitmap){// Draw Background Bitmap
+                    DrawBkPaper(hTempDC, Origin, iRadius, hBkBitmap);
+                }
+
+                {// Check BkColor;
+                    BkColor = GetAverageColor(hTempDC, Origin.x, Origin.y, ERadius * 1.5f);
+                    IsDark = IsColorDark(BkColor);
+                }
+
                 {// Draw Tick
-                    DrawTick(hTempDC, Origin, iRadius, clMask);
+                    DrawTick(hTempDC, Origin, iRadius, IsDark);
                 }
 
                 {// Draw Hand
-                    DrawHand(hTempDC, Origin, iRadius);
+                    DrawHand(hTempDC, Origin, iRadius, IsDark);
                 }
 
                 {// Draw Origin Circle
+                    if(IsDark){
+                        CircleColor = clWhite;
+                    }else{
+                        CircleColor = clBlack;
+                    }
+
                     hBrush = CreateSolidBrush(CircleColor);
                     // hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
                     hOldBrush = (HBRUSH)SelectObject(hTempDC, hBrush);
@@ -324,7 +361,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     // prevMode = SetBkMode(hMemDC, TRANSPARENT);
                     prevMode = SetBkMode(hTempDC, TRANSPARENT);
                     // prevColor = SetTextColor(hMemDC, RGB(0,0,0));
-                    prevColor = SetTextColor(hTempDC, RGB(0,0,0));
+                    prevColor = SetTextColor(hTempDC, IsDark ? clBlack : clWhite);
 
                     // Ellipse(hMemDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
                     Ellipse(hTempDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
@@ -345,7 +382,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     SelectObject(hTempDC, hOldBrush);
                     // SelectObject(hMemDC, hOldPen);
                     SelectObject(hTempDC, hOldPen);
-                    DeleteObject(hBrush);
+                    // DeleteObject(hBrush);
                     DeleteObject(hPen);
                 }
 
@@ -362,7 +399,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
         case WM_LBUTTONDOWN:
             CurrentVisualPart = (Part)((CurrentVisualPart + 1) % 2);
-            CircleColor = (CurrentVisualPart == AM) ? RGB(255, 165, 0) : RGB(135, 206, 235);
+            CircleColor = (CurrentVisualPart == AM) ? AmColor : PmColor;
+            InvalidateRect(hWnd, NULL, FALSE);
+            return 0;
+
+        case WM_RBUTTONDOWN:
+            hNewBitmap = LoadFile();
+            if(hNewBitmap != NULL){
+                if(hBkBitmap != NULL){
+                    DeleteObject(hBkBitmap);
+                    hBkBitmap = NULL;
+                }
+                hBkBitmap = hNewBitmap; 
+            }
             InvalidateRect(hWnd, NULL, FALSE);
             return 0;
 
@@ -384,6 +433,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
         case WM_SIZE:
             if(wParam != SIZE_MINIMIZED){
                 if(bVisual){
+                    if(hTempBitmap){
+                        DeleteObject(hTempBitmap);
+                        hTempBitmap = NULL;
+                    }
+
                     if(hBitmap){
                         DeleteObject(hBitmap);
                         hBitmap = NULL;
@@ -520,6 +574,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             wcscpy(nid.szTip, Temp);
                             nid.hIcon = hAlarmOn;
                             Shell_NotifyIcon(NIM_MODIFY, &nid);
+
+                            InsertionSort(param, Items);
                         }
                     }
                     break;
@@ -759,7 +815,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_DESTROY:
+            GdiplusShutdown(gdiplusToken);
             if(hTempBitmap){DeleteObject(hTempBitmap);}
+            if(hBkBitmap){DeleteObject(hBkBitmap);}
             if(hBitmap){DeleteObject(hBitmap);}
             KillTimer(hWnd, 1);
             KillTimer(hWnd, 2);
@@ -987,6 +1045,8 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
             lvc.cx = 600;
             ListView_InsertColumn(hListView, 0, &lvc);
 
+            InsertionSort(ret->ptr, Items);
+
             for(int i=0; i<Items; i++){
                 memset(&lvi, 0, sizeof(lvi));
                 lvi.mask = LVIF_TEXT;
@@ -1033,8 +1093,8 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
 }
 
 void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color) {
-	float PI = atan(1.f) * 4.f;
-	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
+    float PI = atan(1.f) * 4.f;
+    float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
 
     int Left   = Origin.x - Radius;
     int Top    = Origin.y - Radius;
@@ -1064,13 +1124,40 @@ void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float Ang
     DeleteObject(hBrush);
 }
 
-void DrawTick(HDC hdc, POINT Origin, int iRadius, COLORREF clMask){
-	float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
-	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
+void DrawBkPaper(HDC hdc, POINT Origin, int iRadius, HBITMAP hBitmap) {
+    if(hBitmap == NULL){ return; }
+
+    HDC hMemDC = CreateCompatibleDC(hdc);
+    HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
+
+    BITMAP bmp;
+    GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+    int x, y, width, height;
+    x = Origin.x - iRadius * 0.6f;
+    y = Origin.y - iRadius * 0.6f;
+    width = Origin.x + iRadius * 0.6f - x;
+    height = Origin.y + iRadius * 0.6f - y;
+
+    HRGN hRgn = CreateEllipticRgn(x, y, x + width, y + height);
+    SelectClipRgn(hdc, hRgn);
+
+    SetStretchBltMode(hdc,HALFTONE);
+    StretchBlt(hdc, x,y,width,height, hMemDC, 0, 0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
+
+    SelectClipRgn(hdc, NULL);
+    DeleteObject(hRgn);
+    SelectObject(hMemDC, hOld);
+    DeleteDC(hMemDC);
+}
+
+void DrawOutLine(HDC hdc, POINT Origin, int iRadius){
+    float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
+    float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
     POINT Hand;
 
-    HPEN hPen = CreatePen(PS_SOLID, 5, RGB(255,255,255));
-	HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+    HPEN hPen = CreatePen(PS_SOLID, 5, RGB(255, 255, 255));
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
 
     HBRUSH hBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
@@ -1089,43 +1176,136 @@ void DrawTick(HDC hdc, POINT Origin, int iRadius, COLORREF clMask){
     SelectObject(hdc, hOldBrush);
     DeleteObject(hBrush);
 
-	for(int i=0; i<12; i++){
-		fRadian = fmod((float)(30.f * i) + ThreeQuarter, Circle) * PI / Half;
-		cosf = cos(fRadian);
-		sinf = sin(fRadian);
-
-		Tick pt1 = {Origin.x + iRadius * 0.58f * cosf, Origin.y + iRadius * 0.58f * sinf};
-		Tick pt2 = {Origin.x + iRadius * 0.5f * cosf, Origin.y + iRadius * 0.5f * sinf};
-
-		MoveToEx(hdc, pt1.x, pt1.y, NULL);
-		LineTo(hdc, pt2.x, pt2.y);
-	}
-
-	SelectObject(hdc, hOldPen);
+    SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 }
 
-void DrawHand(HDC hdc, POINT Origin, int iRadius){
-	float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
-	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
+void DrawTick(HDC hdc, POINT Origin, int iRadius, BOOL IsDark){
+    float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
+    float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
     POINT Hand;
 
-    HPEN hPen = CreatePen(PS_SOLID, 2, RGB(0,0,0));
-	HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+    HPEN hPen = CreatePen(PS_SOLID, 3, IsDark ? RGB(255, 255, 255) : RGB(0,0,0));
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
 
-    SYSTEMTIME lt;
-    GetLocalTime(&lt);
+    for(int i=0; i<12; i++){
+        fRadian = fmod((float)(30.f * i) + ThreeQuarter, Circle) * PI / Half;
+        cosf = cos(fRadian);
+        sinf = sin(fRadian);
 
-	// hour
-	fRadian = fmod((float)(30.f * (lt.wHour % 12)) + 0.4f * lt.wMinute + ThreeQuarter, Circle) * PI / Half;
-	Hand.x = (int)(Origin.x + iRadius * 0.4f * cos(fRadian));
-	Hand.y = (int)(Origin.y + iRadius * 0.4f * sin(fRadian));
-	MoveToEx(hdc, Origin.x, Origin.y, NULL);
-	LineTo(hdc, Hand.x, Hand.y);
+        Tick pt1 = {Origin.x + iRadius * 0.58f * cosf, Origin.y + iRadius * 0.58f * sinf};
+        Tick pt2 = {Origin.x + iRadius * 0.5f * cosf, Origin.y + iRadius * 0.5f * sinf};
+
+        MoveToEx(hdc, pt1.x, pt1.y, NULL);
+        LineTo(hdc, pt2.x, pt2.y);
+    }
 
     SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 }
+
+void DrawHand(HDC hdc, POINT Origin, int iRadius, BOOL IsDark){
+    float fRadian, cosf, sinf, PI = atan(1.f) * 4.f, tau = PI * 2.f;
+    float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
+    POINT Hand;
+
+    HPEN hPen = CreatePen(PS_SOLID, 2, IsDark ? RGB(255, 255, 255) : RGB(0,0,0));
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+    SYSTEMTIME lt;
+    GetLocalTime(&lt);
+
+    // hour
+    fRadian = fmod((float)(30.f * (lt.wHour % 12)) + 0.4f * lt.wMinute + ThreeQuarter, Circle) * PI / Half;
+    Hand.x = (int)(Origin.x + iRadius * 0.4f * cos(fRadian));
+    Hand.y = (int)(Origin.y + iRadius * 0.4f * sin(fRadian));
+    MoveToEx(hdc, Origin.x , Origin.y, NULL);
+    LineTo(hdc, Hand.x, Hand.y);
+
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hPen);
+}
+
+COLORREF GetAverageColor(HDC hdc, int x, int y, int rad){
+	int	 r  = 0,
+		 g	= 0,
+		 b	= 0;
+
+	int cnt = 0,
+		SampleX[] = {x, x - rad, x + rad},
+		SampleY[] = {y, y - rad, y + rad};
+
+	COLORREF color;
+	for (int i=0; i<3; i++){
+		for (int j=0; j<3; j++){
+			color = GetPixel(hdc, SampleX[i], SampleY[j]);
+			r += GetRValue(color);
+			g += GetGValue(color);
+			b += GetBValue(color);
+			++cnt;
+		}
+	}
+
+	r /= cnt;
+	g /= cnt;
+	b /= cnt;
+
+	return RGB(r, g, b);
+}
+
+// 0.5 미만 == 어두운 계열
+BOOL IsColorDark(COLORREF color){
+	int  r = GetRValue(color),
+		 g = GetGValue(color),
+		 b = GetBValue(color);
+
+	// 가중 평균
+	double brightness = (r * 0.299f + g * 0.587f + b * 0.114f) / 255.f;
+
+	return brightness < 0.56f;
+}
+
+HBITMAP LoadFile(){
+    void *buf = NULL;
+    WCHAR lpstrFile[MAX_PATH] = L"";
+    WCHAR FileName[MAX_PATH];
+    WCHAR InitDir[MAX_PATH];
+    WCHAR *path[MAX_PATH];
+    WCHAR *pt = NULL;
+    OPENFILENAME ofn;
+
+    memset(&ofn, 0, sizeof(OPENFILENAME));
+    ofn.lStructSize = sizeof(OPENFILENAME);
+    ofn.lpstrFile = lpstrFile;
+    ofn.lpstrFilter = L"이미지 파일\0*.png;*.jpg;*.jpeg;*.bmp\0모든 파일\0*.*\0";
+    ofn.lpstrTitle= L"파일 선택 대화상자";
+    ofn.lpstrDefExt = L"png";
+    ofn.nMaxFile = MAX_PATH;
+    ofn.nMaxFileTitle = MAX_PATH;
+    ofn.hwndOwner = NULL;
+
+    GetWindowsDirectory(InitDir, MAX_PATH);
+    ofn.lpstrInitialDir = InitDir;
+
+    if(GetOpenFileName(&ofn) != 0)
+    {
+        BOOL bExtension = FALSE;
+        WCHAR *ext = lpstrFile + ofn.nFileExtension;
+
+        bExtension = (wcscmp(ext, L"bmp") == 0 || wcscmp(ext, L"png") == 0 || wcscmp(ext, L"jpeg") == 0 || wcscmp(ext, L"jpg") == 0);
+
+        if(bExtension){
+            HBITMAP hBitmap = NULL;
+            Bitmap *gdiBitmap = new Bitmap(lpstrFile);
+            gdiBitmap->GetHBITMAP(Color(0,0,0), &hBitmap);
+            delete gdiBitmap;
+            return hBitmap;
+        }
+    }
+
+    return NULL;
+}
+
 
 #define FIXED_SHIFT 32
 #define FIXED_POINT (1ULL << FIXED_SHIFT)
@@ -1145,4 +1325,28 @@ ULONG MyMod(ULONG Dividend, ULONG Magic, ULONG Divisor){
     return Remainder;
 }
 
-// TODO: 빠른 시간대의 스케줄이 마지막에 추가된 경우 이미 그려진 알람을 전부 덮어버리므로 그리기 순서 정렬 필요
+void SetAttribute(HWND hWnd, bwAttributes Attr){
+    SetLayeredWindowAttributes(hWnd, Attr.rgb, Attr.Opacity, Attr.Flags);
+}
+
+void GetAttribute(HWND hWnd, bwAttributes *Attr){
+    GetLayeredWindowAttributes(hWnd, &Attr->rgb, &Attr->Opacity, &Attr->Flags);
+}
+
+void InsertionSort(InputParam *DataSet, int Length){
+    InputParam temp;
+    int AbsValueOne = 0, AbsValueTwo = 0;
+    int i,j;
+
+	for(i = 1; i < Length; i++){
+        memcpy(&temp, &DataSet[i], sizeof(InputParam));
+        AbsValueOne = DataSet[i].Hour * 3600 + DataSet[i].Minute * 60;
+		for(j = i; j > 0; j--){
+            AbsValueTwo = DataSet[j-1].Hour * 3600 + DataSet[j-1].Minute * 60;
+            if(AbsValueTwo <= AbsValueOne){ break; }
+                
+            memcpy(&DataSet[j], &DataSet[j-1], sizeof(InputParam));
+		}
+        memcpy(&DataSet[j], &temp, sizeof(InputParam));
+	}
+}
