@@ -251,10 +251,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 hOld = SelectObject(hMemDC, hBitmap);
                 hTempOld = SelectObject(hTempDC, hTempBitmap);
 
-                hBrush = CreateSolidBrush(clMask);
-                FillRect(hMemDC, &crt, hBrush);
-                DeleteObject(hBrush);
-
                 iWidth = crt.right - crt.left;
                 iHeight = crt.bottom - crt.top;
                 iRadius = min(iWidth, iHeight) >> 1;
@@ -263,6 +259,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 // hBrush = GetSysColorBrush(COLOR_WINDOW);
                 hBrush = CreateSolidBrush(clMask);
+                FillRect(hMemDC, &crt, hBrush);
                 FillRect(hTempDC, &crt, hBrush);
                 DeleteObject(hBrush);
                 {// Draw Pie
@@ -1072,20 +1069,21 @@ void DrawTick(HDC hdc, POINT Origin, int iRadius, COLORREF clMask){
 	float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
     POINT Hand;
 
-    HPEN hPen = CreatePen(PS_SOLID, 5, RGB(0,0,0));
+    HPEN hPen = CreatePen(PS_SOLID, 5, RGB(255,255,255));
 	HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
 
     HBRUSH hBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
     Ellipse(hdc, Origin.x - iRadius * 0.98f, Origin.y - iRadius * 0.98f, Origin.x + iRadius * 0.98f, Origin.y + iRadius * 0.98f);
     SelectObject(hdc, hOldBrush);
+
     SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 
     hPen = CreatePen(PS_SOLID, 3, RGB(0,0,0));
     hOldPen = (HPEN)SelectObject(hdc, hPen);
 
-    hBrush = CreateSolidBrush(clMask);
+    hBrush = GetSysColorBrush(COLOR_WINDOW);
     hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
     Ellipse(hdc, Origin.x - iRadius * 0.6f, Origin.y - iRadius * 0.6f, Origin.x + iRadius * 0.6f, Origin.y + iRadius * 0.6f);
     SelectObject(hdc, hOldBrush);
