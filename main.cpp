@@ -404,14 +404,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_RBUTTONDOWN:
+            /*
+            // 배경을 바꾸겠다는 의지 표명으로 보고 기존 배경 데이터는 보존하지 않기로 결정
             hNewBitmap = LoadFile();
             if(hNewBitmap != NULL){
-                if(hBkBitmap != NULL){
-                    DeleteObject(hBkBitmap);
-                    hBkBitmap = NULL;
-                }
-                hBkBitmap = hNewBitmap; 
             }
+            */
+            if(hBkBitmap != NULL){
+                DeleteObject(hBkBitmap);
+                hBkBitmap = NULL;
+            }
+            hBkBitmap = LoadFile(); 
             InvalidateRect(hWnd, NULL, FALSE);
             return 0;
 
