@@ -201,8 +201,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     COLORREF BkColor;
     BOOL IsDark;
 
+    static BOOL bDeleteDlg;
+
     switch(iMessage) {
         case WM_CREATE:
+            bDeleteDlg = FALSE;
             GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
             clWhite = RGB(255, 255, 255);
@@ -252,6 +255,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.uCallbackMessage = TRAY_NOTIFY;
             nid.hIcon = hAlarmClock;
             Shell_NotifyIcon(NIM_ADD, &nid);
+
+            RegisterHotKey(hWnd, 0x0000, MOD_CONTROL | MOD_SHIFT, L'E');
+            RegisterHotKey(hWnd, 0x0001, MOD_CONTROL | MOD_SHIFT, L'A');
+            RegisterHotKey(hWnd, 0x0002, MOD_CONTROL | MOD_SHIFT, L'D');
+            RegisterHotKey(hWnd, 0x0003, MOD_CONTROL | MOD_SHIFT, L'X');
+            RegisterHotKey(hWnd, 0x0004, MOD_CONTROL | MOD_SHIFT, L'V');
             SetTimer(hWnd, 1, 100, NULL);
             return 0;
 
@@ -377,6 +386,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             EndPaint(hWnd, &ps);
             return 0;
 
+        case WM_HOTKEY:
+            switch(wParam){
+                case 0:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_MAKEITEM, 0), (LPARAM)hWnd);
+                    break;
+
+                case 1:
+                    if(bVisual){
+                        if(FindWindow(NULL, CLASS_NAME)){
+                            ShowWindow(hWnd, SW_RESTORE);
+                            SetForegroundWindow(hWnd);
+                        }
+                    }else{
+                        SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_VISUAL, 0), (LPARAM)hWnd);
+                    }
+                    break;
+
+                case 2:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_DELETEITEM, 0), (LPARAM)hWnd);
+                    break;
+
+                case 3:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_CLEARPAST, 0), (LPARAM)hWnd);
+                    break;
+
+                case 4:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_TOPMOST, 0), (LPARAM)hWnd);
+                    break;
+            }
+            return 0;
+
         case WM_LBUTTONDOWN:
             CurrentVisualPart = (Part)((CurrentVisualPart + 1) % 2);
             CircleColor = (CurrentVisualPart == AM) ? AmColor : PmColor;
@@ -448,7 +488,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             lwParam = LOWORD(wParam);
             switch(lwParam){
                 case IDM_HELP:
-                    MessageBox(hWnd, L"위 프로그램은 윈도우 환경에서 실행 가능한 일정 관리 도구입니다.\r\n\r\n우측 하단의 파란색 종 모양 아이콘을 좌클릭하면 빠른 대화상자가 생성되며 일정 시작 시간을 입력하실 수 있습니다.\r\n\r\n아이콘 우클릭시 다양한 메뉴 항목을 확인하실 수 있으며 Visual 항목을 선택하면 하루 일정을 시각화하여 보여줍니다.\r\n\r\n시각화된 일정표는 정오를 기준으로 오전과 오후 일정을 나누어 따로 표현합니다.\r\n시간대(AM/PM)는 일정표 중앙에 위치한 원형 모양을 좌클릭하여 변경할 수 있습니다.\r\n또한, 원형 모양을 우클릭하면 시계의 배경 이미지를 설정할 수 있는 대화상자가 생성됩니다.\r\n", L"v1.1.0 Franklin", MB_OK | MB_ICONINFORMATION);
+                    MessageBox(hWnd, L"위 프로그램은 윈도우 환경에서 실행 가능한 일정 관리 도구입니다.\r\n\r\n우측 하단의 파란색 종 모양 아이콘을 좌클릭하면 빠른 대화상자가 생성되며 일정 시작 시간을 입력하실 수 있습니다.\r\n\r\n아이콘 우클릭시 다양한 메뉴 항목을 확인하실 수 있으며 Visual 항목을 선택하면 하루 일정을 시각화하여 보여줍니다.\r\n\r\n시각화된 일정표는 정오를 기준으로 오전과 오후 일정을 나누어 따로 표현합니다.\r\n시간대(AM/PM)는 일정표 중앙에 위치한 원형 모양을 좌클릭하여 변경할 수 있습니다.\r\n또한, 원형 모양을 우클릭하면 시계의 배경 이미지를 설정할 수 있는 대화상자가 생성됩니다.\r\n\r\nv1.1.0부터 조합키를 지원하여 메뉴 항목을 빠르게 이용하실 수 있습니다.\r\n\r\n<조합키 목록>\r\n일정 추가: \t\tCtrl + Shift + E\r\n시각화: \t\t\tCtrl + Shift + A\r\n시각화 종료: \t\tESC\r\n일정 삭제: \t\tCtrl + Shift + D\r\n지난 일정 자동 삭제: \tCtrl + Shift + X\r\n최상위 창으로 설정: \tCtrl + Shift + V", L"v1.1.0 Franklin", MB_OK | MB_ICONINFORMATION);
                     break;
 
                 case IDM_VISUAL:
@@ -562,51 +602,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     break;
 
                 case IDM_DELETEITEM:
-                    memset(&outParam, 0, sizeof(outParam));
-                    outParam.nItems = Items;
-                    outParam.ptr = &param[0];
-                    dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
+                    if(bDeleteDlg == FALSE){
+                        bDeleteDlg = TRUE;
+                        memset(&outParam, 0, sizeof(outParam));
+                        outParam.nItems = Items;
+                        outParam.ptr = &param[0];
 
-                    cnt = outParam.nDelete;
-                    Items -= cnt;
+                        dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
 
-                    if(cnt > 0){
-                        memset(DisplayMessage, 0, sizeof(DisplayMessage));
-                        memset(Times, 0, sizeof(Times));
-                        memset(Messages, 0, sizeof(Messages));
+                        cnt = outParam.nDelete;
+                        Items -= cnt;
 
-                        for(int i=0; i<Items; i++){
-                            wsprintf(Times[i], L"%02d : %02d", outParam.ptr[i].Hour, outParam.ptr[i].Minute);
-                            if(outParam.ptr[i].Message == NULL){
-                                wsprintf(Messages[i], L"");
-                            }else{
-                                wsprintf(Messages[i], L"%s", outParam.ptr[i].Message);
+                        if(cnt > 0){
+                            memset(DisplayMessage, 0, sizeof(DisplayMessage));
+                            memset(Times, 0, sizeof(Times));
+                            memset(Messages, 0, sizeof(Messages));
+
+                            for(int i=0; i<Items; i++){
+                                wsprintf(Times[i], L"%02d : %02d", outParam.ptr[i].Hour, outParam.ptr[i].Minute);
+                                if(outParam.ptr[i].Message == NULL){
+                                    wsprintf(Messages[i], L"");
+                                }else{
+                                    wsprintf(Messages[i], L"%s", outParam.ptr[i].Message);
+                                }
+                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
                             }
-                            wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+
+                            ZeroMemory(&nid, sizeof(nid));
+                            nid.cbSize = sizeof(NOTIFYICONDATA);
+                            nid.uFlags = NIF_TIP | NIF_ICON;
+                            nid.hWnd = hWnd;
+                            nid.uID = 1201;
+
+                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                            nid.uFlags |= NIF_INFO;
+                            nid.dwInfoFlags = NIIF_INFO;
+                            wcscpy(nid.szInfo, Temp);
+                            wcscpy(nid.szInfoTitle, L"정보");
+
+                            if(Items > 0){
+                                wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                                nid.hIcon = hAlarmOn;
+                            }else{
+                                wsprintf(Temp, L"예약된 알람이 없습니다.");
+                                nid.hIcon = hAlarmClock;
+                            }
+
+                            wcscpy(nid.szTip, Temp);
+                            Shell_NotifyIcon(NIM_MODIFY, &nid);
                         }
-
-                        ZeroMemory(&nid, sizeof(nid));
-                        nid.cbSize = sizeof(NOTIFYICONDATA);
-                        nid.uFlags = NIF_TIP | NIF_ICON;
-                        nid.hWnd = hWnd;
-                        nid.uID = 1201;
-
-                        wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
-                        nid.uFlags |= NIF_INFO;
-                        nid.dwInfoFlags = NIIF_INFO;
-                        wcscpy(nid.szInfo, Temp);
-                        wcscpy(nid.szInfoTitle, L"정보");
-
-                        if(Items > 0){
-                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
-                            nid.hIcon = hAlarmOn;
-                        }else{
-                            wsprintf(Temp, L"예약된 알람이 없습니다.");
-                            nid.hIcon = hAlarmClock;
-                        }
-
-                        wcscpy(nid.szTip, Temp);
-                        Shell_NotifyIcon(NIM_MODIFY, &nid);
+                        bDeleteDlg = FALSE;
                     }
                     break;
 
@@ -806,6 +851,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_DESTROY:
+			UnregisterHotKey(hWnd, 0x0000);
+			UnregisterHotKey(hWnd, 0x0001);
+			UnregisterHotKey(hWnd, 0x0002);
+			UnregisterHotKey(hWnd, 0x0003);
+			UnregisterHotKey(hWnd, 0x0004);
             GdiplusShutdown(gdiplusToken);
             if(hTempBitmap){DeleteObject(hTempBitmap);}
             if(hBkBitmap){DeleteObject(hBkBitmap);}
