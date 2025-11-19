@@ -275,7 +275,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 Origin = {iWidth >> 1, iHeight >> 1};
 
-                // hBrush = GetSysColorBrush(COLOR_WINDOW);
                 hBrush = CreateSolidBrush(clMask);
                 FillRect(hMemDC, &crt, hBrush);
                 FillRect(hTempDC, &crt, hBrush);
@@ -310,14 +309,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         MinuteAngle = ((uMinuteMod > 0) ? 0.5f * (FLOAT)(uMinuteMod) : 0.f);
 
                         AngleEnd = HourAngle + MinuteAngle;
-
-                        /*
-                           HourAngle = ItemHour % 12 * 30.f;
-                           MinuteAngle = ItemMinute % 60;
-                           MinuteAngle = ((MinuteAngle) > 0.f ?  30.f / 60.f * MinuteAngle : 0.f);
-                           AngleStart = HourAngle + MinuteAngle;
-                         */
-                         
+                        
                         DrawPiece(hTempDC, Origin, iRadius, AngleStart, ((Next == 0) ? 360.f : AngleEnd), param[i]);
                     }
                 }
@@ -351,37 +343,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     }
 
                     hBrush = CreateSolidBrush(CircleColor);
-                    // hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
                     hOldBrush = (HBRUSH)SelectObject(hTempDC, hBrush);
                     hPen = CreatePen(PS_SOLID, 1, RGB(0,0,0));
-                    // hOldPen = (HPEN)SelectObject(hMemDC, hPen);
                     hOldPen = (HPEN)SelectObject(hTempDC, hPen);
 
-                    // prevMode = SetBkMode(hMemDC, TRANSPARENT);
                     prevMode = SetBkMode(hTempDC, TRANSPARENT);
-                    // prevColor = SetTextColor(hMemDC, RGB(0,0,0));
                     prevColor = SetTextColor(hTempDC, IsDark ? clBlack : clWhite);
 
-                    // Ellipse(hMemDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
                     Ellipse(hTempDC, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
                     SetRect(&rcOrigin, Origin.x - ERadius, Origin.y - ERadius, Origin.x + ERadius, Origin.y + ERadius);
 
-                    // TextOut(hMemDC, Origin.x - PartTextSize.cx * 0.5, Origin.y - PartTextSize.cy * 0.5, (CurrentVisualPart == AM) ? L"AM" : L"PM", 2);
                     TextOut(hTempDC, Origin.x - PartTextSize.cx * 0.5, Origin.y - PartTextSize.cy * 0.5, (CurrentVisualPart == AM) ? L"AM" : L"PM", 2);
 
                     GetObject(hTempBitmap, sizeof(BITMAP), &bmp);
                     TransparentBlt(hMemDC, 0,0, bmp.bmWidth, bmp.bmHeight, hTempDC, 0,0, bmp.bmWidth, bmp.bmHeight, Attr.rgb);
 
-                    // SetBkMode(hMemDC, prevMode);
                     SetBkMode(hTempDC, prevMode);
-                    // SetTextColor(hMemDC, prevColor);
                     SetTextColor(hTempDC, prevColor);
 
-                    // SelectObject(hMemDC, hOldBrush);
                     SelectObject(hTempDC, hOldBrush);
-                    // SelectObject(hMemDC, hOldPen);
                     SelectObject(hTempDC, hOldPen);
-                    // DeleteObject(hBrush);
                     DeleteObject(hPen);
                 }
 
@@ -1113,11 +1094,8 @@ void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float An
 
     // 0도 : 12시
     // 회전: 시계 방향
-    float NormAngleStartDeg = fmod((Circle - AngleStartDeg) + Quarter, Circle);
-    float NormAngleEndDeg = fmod((Circle - AngleEndDeg) + Quarter, Circle);
-
-    float AngleStartRad = NormAngleStartDeg * PI / Half;
-    float AngleEndRad = NormAngleEndDeg * PI / Half;
+    float AngleStartRad = fmod((Circle - AngleStartDeg) + Quarter, Circle) * PI / Half;
+    float AngleEndRad = fmod((Circle - AngleEndDeg) + Quarter, Circle) * PI / Half;
 
     POINT OuterStart = {
         (int)(Origin.x + iRadius * cos(AngleStartRad)),
@@ -1134,8 +1112,6 @@ void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float An
 
     // 순서 주의
     Pie(hdc, Left, Top, Right, Bottom, OuterEnd.x, OuterEnd.y, OuterStart.x, OuterStart.y);
-
-    int prevBkMode = SetBkMode(hdc, TRANSPARENT);
 
     BeginPath(hdc);
     Pie(hdc, Left, Top, Right, Bottom, OuterEnd.x, OuterEnd.y, OuterStart.x, OuterStart.y);
@@ -1161,18 +1137,19 @@ void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float An
             pt.y = Origin.y - r * sin(AngleEndRad);
         }
 
+        int prevBkMode = SetBkMode(hdc, TRANSPARENT);
         /*
         int prevAlign = SetTextAlign(hdc, TA_CENTER | TA_BASELINE);
         TextOut(hdc, pt.x, pt.y, param.Message, wcslen(param.Message));
         SetTextAlign(hdc, prevAlign);
         */
-
         TextOut(hdc, pt.x - (TextSize.cx / 2), pt.y - (TextSize.cy / 2), param.Message, wcslen(param.Message));
+
+        SetBkMode(hdc, prevBkMode);
     }
 
     SelectClipRgn(hdc, NULL);
 
-    SetBkMode(hdc, prevBkMode);
     SelectObject(hdc, hOldBrush);
     DeleteObject(hBrush);
 }
