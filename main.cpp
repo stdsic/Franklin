@@ -94,7 +94,7 @@ typedef struct tag_bwAttributes{
     DWORD		Flags;
 }bwAttributes;
 
-void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color);
+void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float AngleEndDeg, InputParam *param);
 void DrawBkPaper(HDC hdc, POINT Origin, int iRadius, HBITMAP hBitmap);
 void DrawOutLine(HDC hdc, POINT Origin, int iRadius);
 void DrawTick(HDC hdc, POINT Origin, int iRadius, BOOL IsDark);
@@ -317,7 +317,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                          */
 
                         // 아예 고정시키는거로 결정
-                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, 360.f, param[i].color);
+                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, 360.f, &param[i]);
                         // DrawPiece(hMemDC, Origin, iRadius, AngleStart, 360.f, param[i].color);
                         // DrawPiece(hMemDC, Origin, iRadius, AngleStart, AngleEnd, param[i].color);
                     }
@@ -564,12 +564,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         SetForegroundWindow(hWnd);
                         dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR1), hWnd, (DLGPROC)DlgProc, (LPARAM)&param[Items]);
                         if(dlgret == IDOK){
-                            wsprintf(Times[Items], L"%02d : %02d", param[Items].Hour, param[Items].Minute);
-                            if(param[Items].Message == NULL){
-                                wsprintf(Messages[Items], L"");
-                            }else{
-                                wsprintf(Messages[Items], L"%s", param[Items].Message);
-                            }
                             Items++;
 
                             ZeroMemory(&nid, sizeof(nid));
@@ -759,10 +753,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 x				= ScreenWidth - Width >> 1;
                                 y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
 
+                                memset(Times[i], 0, sizeof(Times[i]));
+                                memset(Messages[i], 0, sizeof(Messages[i]));
+                                memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
+
+                                wsprintf(Times[i], L"%02d : %02d", param[i].Hour, param[i].Minute);
+                                if(param[i].Message == NULL){
+                                    wsprintf(Messages[i], L"");
+                                }else{
+                                    wsprintf(Messages[i], L"%s", param[i].Message);
+                                }
+                                wsprintf(DisplayMessage[i], L"%s, %s", Times[i], Messages[i]);
+
                                 if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); AlertWnd[i] = NULL; }
                                 AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
-                                memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
-                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
                                 SendMessage(AlertWnd[i], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)DisplayMessage[i]);
                             }
 
@@ -1099,14 +1103,14 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     return FALSE;
 }
 
-void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float AngleEndDeg, COLORREF color) {
+void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float AngleEndDeg, InputParam *param) {
     float PI = atan(1.f) * 4.f;
     float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f, x, y;
 
-    int Left   = Origin.x - Radius;
-    int Top    = Origin.y - Radius;
-    int Right  = Origin.x + Radius;
-    int Bottom = Origin.y + Radius;
+    int Left   = Origin.x - iRadius;
+    int Top    = Origin.y - iRadius;
+    int Right  = Origin.x + iRadius;
+    int Bottom = Origin.y + iRadius;
 
     // 0도 : 12시
     // 회전: 시계 방향
@@ -1114,18 +1118,39 @@ void DrawPiece(HDC hdc, POINT Origin, int Radius, float AngleStartDeg, float Ang
     float AngleStartRad = fmod((Circle - AngleStartDeg) + Quarter, Circle) * PI / Half;
     float AngleEndRad = fmod((Circle - AngleEndDeg) + Quarter, Circle) * PI / Half;
 
-    int x1 = (int)(Origin.x + Radius * cos(AngleStartRad));
-    int y1 = (int)(Origin.y - Radius * sin(AngleStartRad));
-    int x2 = (int)(Origin.x + Radius * cos(AngleEndRad));
-    int y2 = (int)(Origin.y - Radius * sin(AngleEndRad));
+    int x1 = (int)(Origin.x + iRadius * cos(AngleStartRad));
+    int y1 = (int)(Origin.y - iRadius * sin(AngleStartRad));
+    int x2 = (int)(Origin.x + iRadius * cos(AngleEndRad));
+    int y2 = (int)(Origin.y - iRadius * sin(AngleEndRad));
 
     // if (x1 == x2 && y1 == y2) return;
 
-    HBRUSH hBrush = CreateSolidBrush(color);
+    HBRUSH hBrush = CreateSolidBrush(param->color);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
 
     // 순서 주의
     Pie(hdc, Left, Top, Right, Bottom, x2, y2, x1, y1);
+
+    BeginPath(hdc);
+    Pie(hdc, Left, Top, Right, Bottom, x2, y2, x1, y1);
+    EndPath(hdc);
+
+    SelectClipPath(hdc, RGN_COPY);
+    if(param->Message != NULL){
+        RECT rcText;
+        SIZE TextSize;
+        int prevBkMode = SetBkMode(hdc, TRANSPARENT);
+
+        Tick Vector = { ((x1 + x2) / 2 - Origin.x) * 0.75f, ((y1 + y2) / 2 - Origin.y) * 0.75f };
+        Tick Text = { Origin.x + Vector.x, Origin.y + Vector.y };
+
+        GetTextExtentPoint32(hdc, param->Message, -1, &TextSize);
+        // TODO: 글자 출력 위치 계산
+        // TextOut(hdc, );
+
+        SetBkMode(hdc, prevBkMode);
+    }
+    SelectClipRgn(hdc, NULL);
 
     SelectObject(hdc, hOldBrush);
     DeleteObject(hBrush);
@@ -1312,6 +1337,7 @@ HBITMAP LoadFile(){
 
     return NULL;
 }
+
 
 
 #define FIXED_SHIFT 32
