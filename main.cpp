@@ -261,6 +261,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             RegisterHotKey(hWnd, 0x0002, MOD_CONTROL | MOD_SHIFT, L'D');
             RegisterHotKey(hWnd, 0x0003, MOD_CONTROL | MOD_SHIFT, L'X');
             RegisterHotKey(hWnd, 0x0004, MOD_CONTROL | MOD_SHIFT, L'A');
+            RegisterHotKey(hWnd, 0x0005, MOD_CONTROL | MOD_SHIFT, L'B');
             SetTimer(hWnd, 1, 100, NULL);
             return 0;
 
@@ -413,6 +414,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 case 4:
                     SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_TOPMOST, 0), (LPARAM)hWnd);
+                    break;
+
+                case 5:
+                    SendMessage(hWnd, WM_LBUTTONDOWN, 0,0);
                     break;
             }
             return 0;
@@ -856,6 +861,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			UnregisterHotKey(hWnd, 0x0002);
 			UnregisterHotKey(hWnd, 0x0003);
 			UnregisterHotKey(hWnd, 0x0004);
+			UnregisterHotKey(hWnd, 0x0005);
             GdiplusShutdown(gdiplusToken);
             if(hTempBitmap){DeleteObject(hTempBitmap);}
             if(hBkBitmap){DeleteObject(hBkBitmap);}
