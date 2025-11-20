@@ -174,7 +174,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     float AngleStart, AngleEnd;
     float HourAngle, MinuteAngle;
-    int ItemHour, ItemMinute, ItemVisualPart;
+    int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart;
 
     WORD lwParam;
     int Next;
@@ -1133,6 +1133,8 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     return FALSE;
 }
 
+// TODO
+// i=오전이고 i+1=오후일 때 문제 발생
 void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float AngleEndDeg, InputParam param){
     float PI = atan(1.f) * 4.f;
     float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f;
@@ -1177,7 +1179,7 @@ void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float An
         float inner = iRadius * 0.6f;
         float r = (iRadius + inner) * 0.5f;
 
-        if(AngleEndDeg == Circle){
+        if(AngleEndDeg == Circle || AngleEndDeg == 0.f){
             AngleEndRad = fmod((Circle + AngleStartDeg) * 0.5f + Quarter, Circle) * PI / Half;
             pt.x = Origin.x - r * cos(AngleEndRad);
             pt.y = Origin.y - r * sin(AngleEndRad);
