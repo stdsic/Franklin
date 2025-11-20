@@ -147,7 +147,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     MONITORINFO mi;
     HMONITOR hMonitor;
-    int cnt;
 
     HRESULT hr;
     INITCOMMONCONTROLSEX icex;
@@ -177,7 +176,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart;
 
     WORD lwParam;
-    int Next;
+    int Next, DelCount, EqCount;
 
     static Part CurrentVisualPart;
 
@@ -290,10 +289,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 FillRect(hTempDC, &crt, hBrush);
                 DeleteObject(hBrush);
                 {// Draw Pie
-                    int Next = 0;
+                    EqCount = Next = 0;
                     for(int i=0; i<Items; i++){
                         Next = (i+1) % Items;
-                        if(Items > 1 && param[i].Hour == param[Next].Hour && param[i].Minute == param[Next].Minute){ continue; }
+                        if(Items > 1 && param[i].Hour == param[Next].Hour && param[i].Minute == param[Next].Minute){ EqCount++; continue; }
 
                         ItemVisualPart = param[i].VisualPart;
                         if(ItemVisualPart != CurrentVisualPart){ continue; }
@@ -321,6 +320,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         AngleEnd = HourAngle + MinuteAngle;
                         
                         DrawPiece(hTempDC, Origin, iRadius, AngleStart, ((Next == 0) ? 360.f : AngleEnd), param[i]);
+                    }
+
+                    if(EqCount > 0 && EqCount == Items){
+                        ItemHour = param[Items - 1].Hour;
+                        ItemMinute = param[Items - 1].Minute;
+
+                        uHourMod = MyMod(ItemHour, hourMagic, 12);
+                        HourAngle = (FLOAT)uHourMod * 30.f;
+
+                        uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                        MinuteAngle = ((uMinuteMod > 0) ? 0.5f * (FLOAT)(uMinuteMod) : 0.f);
+
+                        AngleStart = HourAngle + MinuteAngle;
+                        
+                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, 360.f, param[Items - 1]);
                     }
                 }
 
@@ -615,10 +629,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                         dlgret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ITEMSELECTOR2), hWnd, (DLGPROC)DeleteDlgProc, (LPARAM)&outParam);
 
-                        cnt = outParam.nDelete;
-                        Items -= cnt;
+                        DelCount = outParam.nDelete;
+                        Items -= DelCount;
 
-                        if(cnt > 0){
+                        if(DelCount > 0){
                             memset(DisplayMessage, 0, sizeof(DisplayMessage));
                             memset(Times, 0, sizeof(Times));
                             memset(Messages, 0, sizeof(Messages));
@@ -639,7 +653,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             nid.hWnd = hWnd;
                             nid.uID = 1201;
 
-                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", DelCount);
                             nid.uFlags |= NIF_INFO;
                             nid.dwInfoFlags = NIIF_INFO;
                             wcscpy(nid.szInfo, Temp);
@@ -661,8 +675,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     break;
 
                 case IDM_CLEARPAST:
-                    if(Items > 0){
-                        cnt = 0;
+                    if(bDeleteDlg == FALSE && Items > 0){
+                        DelCount = 0;
                         GetLocalTime(&st);
                         for(int i=Items - 1; i>=0; i--){
                             if(param[i].bFlag == TRUE || param[i].Hour < st.wHour || (param[i].Hour == st.wHour && param[i].Minute < st.wMinute)){
@@ -671,7 +685,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 memmove(Messages+ i, Messages + i + 1, sizeof(Messages[i]));
 
                                 Items--;
-                                cnt++;
+                                DelCount++;
                             }
                         }
                         memset(param + Items, 0, sizeof(InputParam) * (MaxSize - Items));
@@ -684,8 +698,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         nid.uID = 1201;
                         nid.uFlags = NIF_TIP | NIF_INFO | NIF_ICON;
                         nid.dwInfoFlags = NIIF_INFO;
-                        if(cnt > 0){
-                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", cnt);
+                        if(DelCount > 0){
+                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", DelCount);
                         }else{
                             wsprintf(Temp, L"정리할 알람이 없습니다.");
                         }
@@ -1139,8 +1153,6 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     return FALSE;
 }
 
-// TODO
-// i=오전이고 i+1=오후일 때 문제 발생
 void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float AngleEndDeg, InputParam param){
     float PI = atan(1.f) * 4.f;
     float Quarter = 90.f, Half = 180.f, ThreeQuarter = 270.f, Circle = 360.f;
