@@ -72,7 +72,8 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 typedef enum tag_Part { AM, PM } Part;
 
 typedef struct tag_inParam{
-    int Hour, Minute;
+    int Day, Hour, Minute;
+    BOOL bFlag;
     COLORREF color;
     Part VisualPart;
     WCHAR Message[0x100];
@@ -168,9 +169,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     HPEN hPen, hOldPen;
     static BOOL bTop;
 
-    float AngleStart, AngleEnd;
+    float AngleStart, AngleEnd, PrevAngleStart;
     float HourAngle, MinuteAngle;
-    int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart;
+    int ItemHour, ItemMinute, PrevItemHour, PrevItemMinute, ItemVisualPart, NextItemVisualPart, PrevItemVisualPart;
 
     WORD lwParam;
     int Prev, Next, DelCount, EqCount;
@@ -198,6 +199,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     BOOL IsDark;
 
     static BOOL bDeleteDlg;
+    BOOL bConditionOne, bConditionTwo, bConditionThree;
 
     switch(iMessage) {
         case WM_CREATE:
@@ -288,11 +290,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 {// Draw Pie
                     EqCount = Next = 0;
                     for(int i=0; i<Items; i++){
+                        Prev = (i-1 + Items) % Items;
                         Next = (i+1) % Items;
+
                         if(Items > 1 && param[i].Hour == param[Next].Hour && param[i].Minute == param[Next].Minute){ EqCount++; continue; }
 
                         ItemVisualPart = param[i].VisualPart;
                         if(ItemVisualPart != CurrentVisualPart){ continue; }
+
+                        NextItemVisualPart = param[Next].VisualPart;
+                        PrevItemVisualPart = param[Prev].VisualPart;
 
                         ItemHour = param[i].Hour;
                         ItemMinute = param[i].Minute;
@@ -316,7 +323,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                         AngleEnd = HourAngle + MinuteAngle;
                         
-                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, ((Next == 0) ? 360.f : AngleEnd), param[i]);
+                        bConditionOne = (Next == 0);
+                        bConditionTwo = (ItemVisualPart != NextItemVisualPart);
+                        bConditionThree = (ItemVisualPart == PrevItemVisualPart);
+
+                        if(!bConditionThree){
+                            PrevItemHour = param[Prev].Hour;
+                            PrevItemMinute = param[Prev].Minute;
+
+                            uHourMod = MyMod(ItemHour, hourMagic, 12);
+                            HourAngle = (FLOAT)uHourMod * 30.f;
+
+                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
+                            MinuteAngle = ((uMinuteMod > 0) ? 0.5f * (FLOAT)(uMinuteMod) : 0.f);
+
+                            PrevAngleStart = HourAngle + MinuteAngle;
+                        }
+
+                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, (bConditionOne || bConditionTwo) ? 0.f : AngleEnd, param[i]);
                     }
 
                     if(EqCount > 0 && EqCount == Items){
@@ -331,7 +355,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                         AngleStart = HourAngle + MinuteAngle;
                         
-                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, 360.f, param[Items - 1]);
+                        DrawPiece(hTempDC, Origin, iRadius, AngleStart, 0.f, param[Items - 1]);
                     }
                 }
 
@@ -666,18 +690,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                         Prev = Next = DelCount = 0;
                         for(int i=Items - 1; i>=0; i--){
-                            Next = (i + 1) % Items;
+                            Next = (i+1) % Items;
+                            if((param[i].Day != st.wDay) || ((param[i].Hour < st.wHour) || ((param[i].Hour == st.wHour) && (param[i].Minute < st.wMinute))) &&
+                                ((param[Next].Hour < st.wHour) || ((param[Next].Hour == st.wHour) && (param[Next].Minute < st.wMinute)))){
 
-                            if(Next != 0){
-                                if((param[i].Hour < st.wHour || (param[i].Hour == st.wHour && param[i].Minute < st.wMinute)) &&
-                                        (param[Next].Hour < st.wHour || (param[Next].Hour == st.wHour && param[Next].Minute < st.wMinute))){
-                                    memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
-                                    Items--;
-                                    DelCount++;
-                                }
-                            }else{
-
-                            }
+                                memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
+                                Items--;
+                                DelCount++;
+                            };
                         }
 
                         // 중복 제거
@@ -771,7 +791,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case 1:
                     GetLocalTime(&st);
                     for(int i=0; i<Items; i++){
-                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute){
+                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute && param[i].bFlag == FALSE){
+                            param[i].bFlag = TRUE;
                             if(bAlertMsg){
                                 dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
                                 dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
@@ -1022,6 +1043,7 @@ LRESULT CALLBACK TodayScheduleWndProc(HWND hWnd, UINT iMessage, WPARAM wParam, L
 
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam){
     static InputParam *ret;
+    SYSTEMTIME st;
 
     switch(iMessage){
         case WM_INITDIALOG:
@@ -1038,6 +1060,8 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
             switch(LOWORD(wParam)){
                 case IDOK:
                     if(ret != NULL){
+                        GetLocalTime(&st);
+                        ret->Day = st.wDay;
                         ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE);
                         ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE);
                         ret->color = RGB(rand() % 106 + 150, rand() % 106 + 150, rand() % 106 + 150);
@@ -1175,7 +1199,7 @@ void DrawPiece(HDC hdc, POINT Origin, int iRadius, float AngleStartDeg, float An
         float inner = iRadius * 0.6f;
         float r = (iRadius + inner) * 0.5f;
 
-        if(AngleEndDeg == Circle || AngleEndDeg == 0.f){
+        if(AngleEndDeg == 0.f){
             AngleEndRad = fmod((Circle + AngleStartDeg) * 0.5f + Quarter, Circle) * PI / Half;
             pt.x = Origin.x - r * cos(AngleEndRad);
             pt.y = Origin.y - r * sin(AngleEndRad);
