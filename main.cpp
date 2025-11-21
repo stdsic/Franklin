@@ -73,7 +73,6 @@ typedef enum tag_Part { AM, PM } Part;
 
 typedef struct tag_inParam{
     int Hour, Minute;
-    BOOL bFlag;
     COLORREF color;
     Part VisualPart;
     WCHAR Message[0x100];
@@ -116,8 +115,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     static HWND MsgWnd[MaxSize];
     static HWND AlertWnd[MaxSize];
     static int Items, BeepCnt;
-    static WCHAR Times[MaxSize][0x20];
-    static WCHAR Messages[MaxSize][0x100];
     static WCHAR DisplayMessage[MaxSize][0x120];
     static HICON hAlarmClock, hAlarmOn; //, hBallonTitle;
 
@@ -176,7 +173,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart;
 
     WORD lwParam;
-    int Next, DelCount, EqCount;
+    int Prev, Next, DelCount, EqCount;
 
     static Part CurrentVisualPart;
 
@@ -408,14 +405,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     break;
 
                 case 1:
-                    if(bVisual){
-                        if(FindWindow(NULL, CLASS_NAME)){
-                            ShowWindow(hWnd, SW_RESTORE);
-                            SetForegroundWindow(hWnd);
-                        }
-                    }else{
-                        SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_VISUAL, 0), (LPARAM)hWnd);
-                    }
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_VISUAL, 0), (LPARAM)hWnd);
                     break;
 
                 case 2:
@@ -511,21 +501,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     break;
 
                 case IDM_VISUAL:
-                    bVisual = TRUE;
-                    dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
-                    dwExStyle &= ~WS_EX_NOACTIVATE;
-                    SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
+                    if(bVisual){
+                        if(FindWindow(NULL, CLASS_NAME)){
+                            ShowWindow(hWnd, SW_RESTORE);
+                            SetForegroundWindow(hWnd);
+                        }
+                    }else{
+                        bVisual = TRUE;
+                        dwExStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+                        dwExStyle &= ~WS_EX_NOACTIVATE;
+                        SetWindowLongPtr(hWnd, GWL_EXSTYLE, dwExStyle);
 
-                    sx = GetSystemMetrics(SM_CXSCREEN);
-                    sy = GetSystemMetrics(SM_CYSCREEN);
-                    BorderSize = GetSystemMetrics(SM_CXEDGE);
+                        sx = GetSystemMetrics(SM_CXSCREEN);
+                        sy = GetSystemMetrics(SM_CYSCREEN);
+                        BorderSize = GetSystemMetrics(SM_CXEDGE);
 
-                    cx = cy = 400;
-                    SetWindowPos(hWnd, NULL, sx - cx, 0, cx, cy, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                        cx = cy = 400;
+                        SetWindowPos(hWnd, NULL, sx - cx, 0, cx, cy, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
 
-                    hWndRgn = CreateEllipticRgn(BorderSize, BorderSize, cx-BorderSize, cy-BorderSize);
-                    SetWindowRgn(hWnd, hWndRgn, FALSE);
-                    SetTimer(hWnd, 3, 1000, NULL);
+                        hWndRgn = CreateEllipticRgn(BorderSize, BorderSize, cx-BorderSize, cy-BorderSize);
+                        SetWindowRgn(hWnd, hWndRgn, FALSE);
+                        SetTimer(hWnd, 3, 1000, NULL);
+                    }
                     break;
 
                 case IDM_TOPMOST:
@@ -548,10 +545,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 case IDM_SHOWLIST:
                     if(Items > 0){
-                        hdc = GetDC(hWnd);
                         memset(DisplayMessage, 0, sizeof(DisplayMessage));
+
+                        hdc = GetDC(hWnd);
                         for(int i=0; i<Items; i++){
-                            wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
+                            wsprintf(DisplayMessage[i], L"%02d : %02d, %s", param[i].Hour, param[i].Minute, (param[i].Message != NULL) ? param[i].Message : L"");
                             GetTextExtentPoint32(hdc, DisplayMessage[i], wcslen(DisplayMessage[i]), &TextSize);
                             MaxLength = max(MaxLength, TextSize.cx);
                         }
@@ -623,6 +621,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case IDM_DELETEITEM:
                     if(bDeleteDlg == FALSE){
                         bDeleteDlg = TRUE;
+
+                        InsertionSort(param, Items);
                         memset(&outParam, 0, sizeof(outParam));
                         outParam.nItems = Items;
                         outParam.ptr = &param[0];
@@ -633,20 +633,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         Items -= DelCount;
 
                         if(DelCount > 0){
-                            memset(DisplayMessage, 0, sizeof(DisplayMessage));
-                            memset(Times, 0, sizeof(Times));
-                            memset(Messages, 0, sizeof(Messages));
-
-                            for(int i=0; i<Items; i++){
-                                wsprintf(Times[i], L"%02d : %02d", outParam.ptr[i].Hour, outParam.ptr[i].Minute);
-                                if(outParam.ptr[i].Message == NULL){
-                                    wsprintf(Messages[i], L"");
-                                }else{
-                                    wsprintf(Messages[i], L"%s", outParam.ptr[i].Message);
-                                }
-                                wsprintf(DisplayMessage[i], L"%s, %s\r\n", Times[i], Messages[i]);
-                            }
-
                             ZeroMemory(&nid, sizeof(nid));
                             nid.cbSize = sizeof(NOTIFYICONDATA);
                             nid.uFlags = NIF_TIP | NIF_ICON;
@@ -676,21 +662,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 case IDM_CLEARPAST:
                     if(bDeleteDlg == FALSE && Items > 0){
-                        DelCount = 0;
                         GetLocalTime(&st);
-                        for(int i=Items - 1; i>=0; i--){
-                            if(param[i].bFlag == TRUE || param[i].Hour < st.wHour || (param[i].Hour == st.wHour && param[i].Minute < st.wMinute)){
-                                memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
-                                memmove(Times + i, Times + i + 1, sizeof(Times[i]));
-                                memmove(Messages+ i, Messages + i + 1, sizeof(Messages[i]));
 
+                        Prev = Next = DelCount = 0;
+                        for(int i=Items - 1; i>=0; i--){
+                            Next = (i + 1) % Items;
+
+                            if(Next != 0){
+                                if((param[i].Hour < st.wHour || (param[i].Hour == st.wHour && param[i].Minute < st.wMinute)) &&
+                                        (param[Next].Hour < st.wHour || (param[Next].Hour == st.wHour && param[Next].Minute < st.wMinute))){
+                                    memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
+                                    Items--;
+                                    DelCount++;
+                                }
+                            }else{
+
+                            }
+                        }
+
+                        // 중복 제거
+                        for(int i=Items - 1; i>=1; i--){
+                            Prev = i - 1;
+                            if(param[Prev].Hour == param[i].Hour && param[Prev].Minute == param[i].Minute){
+                                memmove(param + Prev, param + i, sizeof(InputParam) * (Items - i + 1));
                                 Items--;
                                 DelCount++;
                             }
                         }
+
                         memset(param + Items, 0, sizeof(InputParam) * (MaxSize - Items));
-                        memset(Times + Items, 0, sizeof(Times[0]) * (MaxSize - Items));
-                        memset(Messages+ Items, 0, sizeof(Messages[0]) * (MaxSize - Items));
 
                         ZeroMemory(&nid, sizeof(nid));
                         nid.cbSize = sizeof(NOTIFYICONDATA);
@@ -771,8 +771,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case 1:
                     GetLocalTime(&st);
                     for(int i=0; i<Items; i++){
-                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute && param[i].bFlag == FALSE){
-                            param[i].bFlag = TRUE;
+                        if(st.wHour == param[i].Hour && st.wMinute == param[i].Minute){
                             if(bAlertMsg){
                                 dwStyle	= WS_POPUP | WS_BORDER | WS_VISIBLE | WS_CLIPSIBLINGS;
                                 dwExStyle = WS_EX_COMPOSITED | WS_EX_TOPMOST;
@@ -797,17 +796,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                                 x				= ScreenWidth - Width >> 1;
                                 y				= ScreenHeight - (TaskBarHeight + Height) >> 1;
 
-                                memset(Times[i], 0, sizeof(Times[i]));
-                                memset(Messages[i], 0, sizeof(Messages[i]));
                                 memset(DisplayMessage[i], 0, sizeof(DisplayMessage[i]));
-
-                                wsprintf(Times[i], L"%02d : %02d", param[i].Hour, param[i].Minute);
-                                if(param[i].Message == NULL){
-                                    wsprintf(Messages[i], L"");
-                                }else{
-                                    wsprintf(Messages[i], L"%s", param[i].Message);
-                                }
-                                wsprintf(DisplayMessage[i], L"%s, %s", Times[i], Messages[i]);
+                                wsprintf(DisplayMessage[i], L"%02d : %02d, %s", param[i].Hour, param[i].Minute, (param[i].Message != NULL) ? param[i].Message : L"");
 
                                 if(IsWindow(AlertWnd[i])){ DestroyWindow(AlertWnd[i]); AlertWnd[i] = NULL; }
                                 AlertWnd[i] = CreateWindowEx(dwExStyle, SUBCLASS_NAME, NULL, dwStyle, x, y, Width, Height, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
@@ -1074,9 +1064,6 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
 
     static OutputParam *ret;
 
-    WCHAR Temp[0x20];
-    static WCHAR Time[MaxSize][0x100];
-    static WCHAR Times[MaxSize][0x20];
     static WCHAR Messages[MaxSize][0x100];
     static WCHAR DisplayMessage[MaxSize][0x120];
 
@@ -1085,7 +1072,7 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
     LVITEM lvi;
     RECT srt;
 
-    int cnt;
+    int DelCount;
 
     switch(iMessage){
         case WM_INITDIALOG:
@@ -1106,21 +1093,12 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
             lvc.cx = 600;
             ListView_InsertColumn(hListView, 0, &lvc);
 
-            InsertionSort(ret->ptr, Items);
-
             for(int i=0; i<Items; i++){
                 memset(&lvi, 0, sizeof(lvi));
                 lvi.mask = LVIF_TEXT;
                 lvi.iItem = i;
 
-                wsprintf(Times[i], L"%02d : %02d", ret->ptr[i].Hour, ret->ptr[i].Minute);
-                if(ret->ptr[i].Message == NULL){
-                    wsprintf(Messages[i], L"");
-                }else{
-                    wsprintf(Messages[i], L"%s", ret->ptr[i].Message);
-                }
-
-                wsprintf(DisplayMessage[i], L"%s, %s", Times[i], Messages[i]);
+                wsprintf(DisplayMessage[i], L"%02d : %02d, %s", ret->ptr[i].Hour, ret->ptr[i].Minute, (ret->ptr[i].Message != NULL) ? ret->ptr[i].Message : L"");
                 lvi.pszText = DisplayMessage[i];
                 ListView_InsertItem(hListView, &lvi);
             }
@@ -1129,17 +1107,17 @@ INT_PTR CALLBACK DeleteDlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM l
         case WM_COMMAND:
             switch(LOWORD(wParam)){
                 case IDOK:
-                    cnt = 0;
+                    DelCount = 0;
                     for (int i=Items - 1; i>=0; i--) {
                         BOOL checked = ListView_GetCheckState(hListView, i);
                         if(checked == 1){
                             memmove(&ret->ptr[i], &ret->ptr[i + 1], sizeof(InputParam) * (Items - i - 1));
                             Items--;
-                            cnt++;
+                            DelCount++;
                         }
                     }
                     memset(ret->ptr + Items, 0, sizeof(InputParam) * (MaxSize - Items));
-                    ret->nDelete = cnt;
+                    ret->nDelete = DelCount;
                     EndDialog(hDlg, LOWORD(wParam));
                     return TRUE;
 
