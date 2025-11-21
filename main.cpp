@@ -259,7 +259,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             RegisterHotKey(hWnd, 0x0002, MOD_CONTROL | MOD_SHIFT, L'D');
             RegisterHotKey(hWnd, 0x0003, MOD_CONTROL | MOD_SHIFT, L'X');
             RegisterHotKey(hWnd, 0x0004, MOD_CONTROL | MOD_SHIFT, L'A');
-            RegisterHotKey(hWnd, 0x0005, MOD_CONTROL | MOD_SHIFT, L'B');
+            RegisterHotKey(hWnd, 0x0005, MOD_CONTROL | MOD_SHIFT, L'L');
+            RegisterHotKey(hWnd, 0x0006, MOD_CONTROL | MOD_SHIFT, L'B');
             SetTimer(hWnd, 1, 100, NULL);
             return 0;
 
@@ -436,6 +437,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     break;
 
                 case 5:
+                    SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDM_SHOWLIST, 0), (LPARAM)hWnd);
+                    break;
+
+                case 6:
                     SendMessage(hWnd, WM_LBUTTONDOWN, 0,0);
                     break;
             }
@@ -512,7 +517,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             lwParam = LOWORD(wParam);
             switch(lwParam){
                 case IDM_HELP:
-                    MessageBox(hWnd, L"위 프로그램은 윈도우 환경에서 실행 가능한 일정 관리 도구입니다.\r\n\r\n우측 하단의 파란색 종 모양 아이콘을 좌클릭하면 빠른 대화상자가 생성되며 일정 시작 시간을 입력하실 수 있습니다.\r\n\r\n아이콘 우클릭시 다양한 메뉴 항목을 확인하실 수 있으며 Visual 항목을 선택하면 하루 일정을 시각화하여 보여줍니다.\r\n\r\n시각화된 일정표는 정오를 기준으로 오전과 오후 일정을 나누어 따로 표현합니다.\r\n시간대(AM/PM)는 일정표 중앙에 위치한 원형 모양을 좌클릭하여 변경할 수 있습니다.\r\n또한, 원형 모양을 우클릭하면 시계의 배경 이미지를 설정할 수 있는 대화상자가 생성됩니다.\r\n\r\nv1.1.0부터 조합키를 지원하여 메뉴 항목을 빠르게 이용하실 수 있습니다.\r\n\r\n<조합키 목록>\r\n일정 추가: \t\tCtrl + Shift + E\r\n시각화: \t\t\tCtrl + Shift + V\r\n시각화 종료: \t\tESC\r\n일정 삭제: \t\tCtrl + Shift + D\r\n지난 일정 자동 삭제: \tCtrl + Shift + X\r\n항상 위에 표시: \t\tCtrl + Shift + A", L"v1.1.0 Franklin", MB_OK | MB_ICONINFORMATION);
+                    MessageBox(hWnd, L"위 프로그램은 윈도우 환경에서 실행 가능한 일정 관리 도구입니다.\r\n\r\n우측 하단의 파란색 종 모양 아이콘을 좌클릭하면 빠른 대화상자가 생성되며 일정 시작 시간을 입력하실 수 있습니다.\r\n\r\n아이콘 우클릭시 다양한 메뉴 항목을 확인하실 수 있으며 Visual 항목을 선택하면 하루 일정을 시각화하여 보여줍니다.\r\n\r\n시각화된 일정표는 정오를 기준으로 오전과 오후 일정을 나누어 따로 표현합니다.\r\n시간대(AM/PM)는 일정표 중앙에 위치한 원형 모양을 좌클릭하여 변경할 수 있습니다.\r\n또한, 원형 모양을 우클릭하면 시계의 배경 이미지를 설정할 수 있는 대화상자가 생성됩니다.\r\n\r\nv1.1.0부터 조합키를 지원하여 메뉴 항목을 빠르게 이용하실 수 있습니다.\r\n\r\n<조합키 목록>\r\n일정 추가: \t\tCtrl + Shift + E\r\n시각화: \t\t\tCtrl + Shift + V\r\n시각화 종료: \t\tESC\r\n일정 삭제: \t\tCtrl + Shift + D\r\n지난 일정 자동 삭제: \tCtrl + Shift + X\r\n항상 위에 표시: \t\tCtrl + Shift + A\r\n리스트 표시: \t\tCtrl + Shift + L\r\nAM/PM 변경: \t\tCtrl + Shift + B", L"v1.1.0 Franklin", MB_OK | MB_ICONINFORMATION);
                     break;
 
                 case IDM_VISUAL:
@@ -878,6 +883,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			UnregisterHotKey(hWnd, 0x0003);
 			UnregisterHotKey(hWnd, 0x0004);
 			UnregisterHotKey(hWnd, 0x0005);
+			UnregisterHotKey(hWnd, 0x0006);
             GdiplusShutdown(gdiplusToken);
             if(hTempBitmap){DeleteObject(hTempBitmap);}
             if(hBkBitmap){DeleteObject(hBkBitmap);}
