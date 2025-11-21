@@ -169,9 +169,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
     HPEN hPen, hOldPen;
     static BOOL bTop;
 
-    float AngleStart, AngleEnd, PrevAngleStart;
+    float AngleStart, AngleEnd;
     float HourAngle, MinuteAngle;
-    int ItemHour, ItemMinute, PrevItemHour, PrevItemMinute, ItemVisualPart, NextItemVisualPart, PrevItemVisualPart;
+    int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart, PrevItemVisualPart;
 
     WORD lwParam;
     int Prev, Next, DelCount, EqCount;
@@ -325,19 +325,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         
                         bConditionOne = (Next == 0);
                         bConditionTwo = (ItemVisualPart != NextItemVisualPart);
-                        bConditionThree = (ItemVisualPart == PrevItemVisualPart);
+                        bConditionThree = (ItemVisualPart != PrevItemVisualPart);
 
-                        if(!bConditionThree){
-                            PrevItemHour = param[Prev].Hour;
-                            PrevItemMinute = param[Prev].Minute;
-
-                            uHourMod = MyMod(ItemHour, hourMagic, 12);
-                            HourAngle = (FLOAT)uHourMod * 30.f;
-
-                            uMinuteMod = MyMod(ItemMinute, minMagic, 60);
-                            MinuteAngle = ((uMinuteMod > 0) ? 0.5f * (FLOAT)(uMinuteMod) : 0.f);
-
-                            PrevAngleStart = HourAngle + MinuteAngle;
+                        if(Next != 0 && Prev != (Items - 1) && bConditionThree){
+                            DrawPiece(hTempDC, Origin, iRadius, 0.f, AngleStart, param[Prev]);
                         }
 
                         DrawPiece(hTempDC, Origin, iRadius, AngleStart, (bConditionOne || bConditionTwo) ? 0.f : AngleEnd, param[i]);
