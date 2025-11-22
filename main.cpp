@@ -328,7 +328,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         bConditionTwo = (ItemVisualPart != NextItemVisualPart);
                         bConditionThree = (ItemVisualPart != PrevItemVisualPart);
 
-                        if(Next != 0 && Prev != (Items - 1) && bConditionThree){
+                        if(bConditionThree && param[Prev].Hour < 12 && param[i].Hour >= 12){
                             DrawPiece(hTempDC, Origin, iRadius, 0.f, AngleStart, param[Prev]);
                         }
 
