@@ -1,4 +1,4 @@
-![Franklin 실행 화면](./Images/Franklin-demo.gif)
+![Franklin 실행 화면](./Images/franklin-demo.gif)
 # 📌 Franklin<br>
 윈도우 운영체제를 구성하는 Legacy API를 활용해 만든 일정 관리 프로그램입니다.<br>
 <br><br>
