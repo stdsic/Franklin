@@ -28,6 +28,9 @@ Franklin은 시간 관리를 위해 제작된 일정 관리 도구이며 단축�
 - stdsic — @https://github.com/stdsic/Franklin<br>
 <br><br>
 ## 📚 Version History<br>
+- 1.1.1<br>
+  - 지난 일정 자동삭제 조건 수정
+
 - 1.1.0<br>
   - 기능 업데이트 : 단축키 및 시각화 지원
   - 이전 버전의 오류 수정
