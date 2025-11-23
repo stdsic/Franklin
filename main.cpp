@@ -171,7 +171,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
     float AngleStart, AngleEnd;
     float HourAngle, MinuteAngle;
-    int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart, PrevItemVisualPart;
+    int ItemHour, ItemMinute, ItemVisualPart, NextItemVisualPart, PrevItemVisualPart, LocalTimeVisualPart;
 
     WORD lwParam;
     int Prev, Next, DelCount, EqCount;
@@ -683,17 +683,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                 case IDM_CLEARPAST:
                     if(bDeleteDlg == FALSE && Items > 0){
                         GetLocalTime(&st);
+                        LocalTimeVisualPart = st.wHour < 12 ? AM : PM;
 
                         Prev = Next = DelCount = 0;
                         for(int i=Items - 1; i>=0; i--){
                             Next = (i+1) % Items;
-                            if((param[i].Day != st.wDay) || ((param[i].Hour < st.wHour) || ((param[i].Hour == st.wHour) && (param[i].Minute < st.wMinute))) &&
-                                ((param[Next].Hour < st.wHour) || ((param[Next].Hour == st.wHour) && (param[Next].Minute < st.wMinute)))){
 
-                                memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
-                                Items--;
-                                DelCount++;
-                            };
+                            if(Next != 0){
+                                if((param[i].Day != st.wDay) || ((param[i].Hour < st.wHour) || ((param[i].Hour == st.wHour) && (param[i].Minute < st.wMinute))) &&
+                                    ((param[Next].Hour < st.wHour) || ((param[Next].Hour == st.wHour) && (param[Next].Minute < st.wMinute)))){
+
+                                    memmove(param + i, param + i + 1, sizeof(InputParam) * (Items - i - 1));
+                                    Items--;
+                                    DelCount++;
+                                }
+                            }else{
+                                if(param[i].VisualPart == AM){
+                                    if((param[i].Day != st.wDay) || (param[i].VisualPart != LocalTimeVisualPart)){
+                                        memset(param + i, 0, sizeof(InputParam));
+                                        Items--;
+                                        DelCount++;
+                                    }
+                                }else{
+                                    if(param[i].Day != st.wDay){
+                                        memset(param + i, 0, sizeof(InputParam));
+                                        Items--;
+                                        DelCount++;
+                                    }
+                                }
+                            }
                         }
 
                         // 중복 제거
@@ -1059,8 +1077,8 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
                     if(ret != NULL){
                         GetLocalTime(&st);
                         ret->Day = st.wDay;
-                        ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE);
-                        ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE);
+                        ret->Hour = GetDlgItemInt(hDlg, IDC_ITEMEDIT1, NULL, FALSE) % 24;
+                        ret->Minute = GetDlgItemInt(hDlg, IDC_ITEMEDIT2, NULL, FALSE) % 60;
                         ret->color = RGB(rand() % 106 + 150, rand() % 106 + 150, rand() % 106 + 150);
                         ret->VisualPart = (((ret->Hour) / 12) & 1) ? PM : AM;
                         GetDlgItemText(hDlg, IDC_ITEMEDIT3, ret->Message, 0x100);
