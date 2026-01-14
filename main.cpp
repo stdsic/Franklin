@@ -249,7 +249,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
             nid.hWnd = hWnd;
             nid.uID = 1201;
             nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
-            wcscpy(nid.szTip, L"예약된 알람이 없습니다.");
+            wcscpy(nid.szTip, L"예약된 일정이 없습니다.");
             nid.uCallbackMessage = TRAY_NOTIFY;
             nid.hIcon = hAlarmClock;
             Shell_NotifyIcon(NIM_ADD, &nid);
@@ -613,7 +613,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
                 case IDM_MAKEITEM:
                     if(Items >= MaxSize){ 
-                        if(IDYES == MessageBox(hWnd, L"알람을 더이상 등록할 수 없습니다(Max: 32)\r\n이전에 등록된 알람이 해제되면 다시 등록할 수 있습니다.\r\n정리 프로세스를 실행하시겠습니까?", L"정보", MB_ICONINFORMATION | MB_YESNO)){
+                        if(IDYES == MessageBox(hWnd, L"일정을 더이상 등록할 수 없습니다(Max: 32)\r\n이전에 등록된 일정을 삭제하면 다시 등록할 수 있습니다.\r\n정리 프로세스를 실행하시겠습니까?", L"정보", MB_ICONINFORMATION | MB_YESNO)){
                             PostMessage(hWnd, IDM_CLEARPAST, 0, 0);
                         }
                     }else{
@@ -628,7 +628,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             nid.hWnd = hWnd;
                             nid.uID = 1201;
                             nid.uFlags = NIF_TIP | NIF_ICON;
-                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                            wsprintf(Temp, L"%d개의 일정이 있습니다.", Items);
                             wcscpy(nid.szTip, Temp);
                             nid.hIcon = hAlarmOn;
                             Shell_NotifyIcon(NIM_MODIFY, &nid);
@@ -659,17 +659,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                             nid.hWnd = hWnd;
                             nid.uID = 1201;
 
-                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", DelCount);
+                            wsprintf(Temp, L"%d개의 일정을 정리하였습니다.", DelCount);
                             nid.uFlags |= NIF_INFO;
                             nid.dwInfoFlags = NIIF_INFO;
                             wcscpy(nid.szInfo, Temp);
                             wcscpy(nid.szInfoTitle, L"정보");
 
                             if(Items > 0){
-                                wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                                wsprintf(Temp, L"%d개의 일정이 있습니다.", Items);
                                 nid.hIcon = hAlarmOn;
                             }else{
-                                wsprintf(Temp, L"예약된 알람이 없습니다.");
+                                wsprintf(Temp, L"예약된 일정이 없습니다.");
                                 nid.hIcon = hAlarmClock;
                             }
 
@@ -733,17 +733,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
                         nid.uFlags = NIF_TIP | NIF_INFO | NIF_ICON;
                         nid.dwInfoFlags = NIIF_INFO;
                         if(DelCount > 0){
-                            wsprintf(Temp, L"%d개의 알람을 정리하였습니다.", DelCount);
+                            wsprintf(Temp, L"%d개의 일정을 정리하였습니다.", DelCount);
                         }else{
-                            wsprintf(Temp, L"정리할 알람이 없습니다.");
+                            wsprintf(Temp, L"정리할 일정이 없습니다.");
                         }
                         wcscpy(nid.szInfo, Temp);
                         wcscpy(nid.szInfoTitle, L"정보");
                         if(Items > 0){
-                            wsprintf(Temp, L"%d개의 알람이 있습니다.", Items);
+                            wsprintf(Temp, L"%d개의 일정이 있습니다.", Items);
                             nid.hIcon = hAlarmOn;
                         }else{
-                            wsprintf(Temp, L"예약된 알람이 없습니다.");
+                            wsprintf(Temp, L"예약된 일정이 없습니다.");
                             nid.hIcon = hAlarmClock;
                         }
                         wcscpy(nid.szTip, Temp);
