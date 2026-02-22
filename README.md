@@ -1,11 +1,11 @@
 ![Franklin 실행 화면](./Images/franklin-demo.gif)
 # 📌 Franklin<br>
-윈도우 운영체제를 구성하는 Legacy API를 활용해 만든 일정 관리 프로그램입니다.<br>
+윈도우 Legacy API를 활용해 만든 일정 관리 프로그램입니다.<br>
 <br><br>
 ## 📝 Description<br>
 Franklin은 시간 관리를 위해 제작된 일정 관리 도구이며 단축키와 시각화를 지원합니다.<br>
 위 프로그램 실행시 작업표시줄 우측 아이콘 목록에 아이콘이 추가되며 좌클릭 또는 우클릭을 이용하여 상호작용할 수 있습니다.<br>
-일정은 휘발성으로 프로그램 종료시 기록된 내용은 사라집니다.<br>
+기록한 일정은 휘발성이며 프로그램 종료시 삭제됩니다.<br>
 <br><br>
 ## 🚀 Getting Started<br>
 ### 🔧 Dependencies<br>
@@ -35,6 +35,9 @@ Franklin은 시간 관리를 위해 제작된 일정 관리 도구이며 단축�
     - 항상 위에 표시: Ctrl + Shift + A
     - 리스트 표시: Ctrl + Shift + L
     - AM/PM 변경: Ctrl + Shift + B
+<br><br>
+✨ Known Issue<br>
+- Windows Layered Window Transparency : Windows의 SetLayeredWindowAttributes는 GDI 기반의 전체 알파 처리 방식으로,HDR 또는 고DPI 환경에서 색상 클리핑(Color Clipping) 현상이 발생할 수 있습니다. 이는 Windows의 GDI → DWM 혼합 렌더링 경로에서 발생하는 구조적 문제입니다.
 <br><br>
 ## 👤 Authors<br>
 - stdsic — @https://github.com/stdsic/Franklin<br>
