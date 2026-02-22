@@ -36,7 +36,7 @@ Franklin은 시간 관리를 위해 제작된 일정 관리 도구이며 단축�
     - 리스트 표시: Ctrl + Shift + L
     - AM/PM 변경: Ctrl + Shift + B
 <br><br>
-✨ Known Issue<br>
+## ✨ Known Issue<br>
 - Windows Layered Window Transparency : Windows의 SetLayeredWindowAttributes는 GDI 기반의 전체 알파 처리 방식으로,HDR 또는 고DPI 환경에서 색상 클리핑(Color Clipping) 현상이 발생할 수 있습니다. 이는 Windows의 GDI → DWM 혼합 렌더링 경로에서 발생하는 구조적 문제입니다.
 <br><br>
 ## 👤 Authors<br>
